@@ -16,9 +16,40 @@ pub struct Project {
     pub source: String,
     pub github_id: Option<i64>,
     pub pushed_at: Option<String>,
+    pub gh_created_at: Option<String>,
     pub created_at: String,
     pub updated_at: String,
     pub tags: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatSession {
+    pub id: i64,
+    pub title: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StoredChatMessage {
+    pub id: i64,
+    pub role: String,
+    pub content: String,
+    pub actions: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RepoHit {
+    pub full_name: String,
+    pub description: String,
+    pub html_url: String,
+    pub language: Option<String>,
+    pub stars: i64,
+    pub forks: i64,
+    pub topics: Vec<String>,
+    pub pushed_at: Option<String>,
+    pub gh_created_at: Option<String>,
+    pub already_saved: bool,
 }
 
 /// Полезная нагрузка для создания/обновления проекта вручную.

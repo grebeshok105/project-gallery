@@ -169,18 +169,19 @@ pub async fn import_github(state: State<'_, Db>, username: String) -> R<usize> {
         let changed = conn
             .execute(
                 "INSERT INTO projects
-                    (title, description, status, kind, repo_url, homepage_url, language, stars, source, github_id, pushed_at)
-                 VALUES (?1,?2,?3,'pet',?4,?5,?6,?7,'github',?8,?9)
+                    (title, description, status, kind, repo_url, homepage_url, language, stars, source, github_id, pushed_at, gh_created_at)
+                 VALUES (?1,?2,?3,'pet',?4,?5,?6,?7,'github',?8,?9,?10)
                  ON CONFLICT(github_id) DO UPDATE SET
                     description=excluded.description,
                     homepage_url=excluded.homepage_url,
                     language=excluded.language,
                     stars=excluded.stars,
                     pushed_at=excluded.pushed_at,
+                    gh_created_at=excluded.gh_created_at,
                     updated_at=datetime('now')",
                 rusqlite::params![
                     r.title, r.description, status, r.repo_url, r.homepage_url,
-                    r.language, r.stars, r.github_id, r.pushed_at
+                    r.language, r.stars, r.github_id, r.pushed_at, r.gh_created_at
                 ],
             )
             .map_err(e)?;
@@ -287,6 +288,7 @@ pub struct AgentReply {
 pub async fn llm_agent_chat(
     state: State<'_, Db>,
     messages: Vec<ChatMessage>,
+    chat_id: Option<i64>,
 ) -> R<AgentReply> {
     let cfg = {
         let conn = state.0.lock().map_err(e)?;
@@ -302,6 +304,11 @@ pub async fn llm_agent_chat(
         }
         msgs.push(serde_json::json!({"role": m.role, "content": m.content}));
     }
+    let last_user = messages
+        .iter()
+        .rev()
+        .find(|m| m.role == "user")
+        .map(|m| m.content.clone());
 
     let tools = crate::agent::tools();
     let mut actions: Vec<String> = Vec::new();
@@ -371,11 +378,27 @@ pub async fn llm_agent_chat(
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .to_string();
+                if let Some(cid) = chat_id {
+                    if let Ok(conn) = state.0.lock() {
+                        if let Some(u) = &last_user {
+                            let _ = db::add_chat_message(&conn, cid, "user", u, &[]);
+                        }
+                        let _ = db::add_chat_message(&conn, cid, "assistant", &reply, &actions);
+                    }
+                }
                 return Ok(AgentReply { reply, actions });
             }
         }
     }
 
+    if let Some(cid) = chat_id {
+        if let Ok(conn) = state.0.lock() {
+            if let Some(u) = &last_user {
+                let _ = db::add_chat_message(&conn, cid, "user", u, &[]);
+            }
+            let _ = db::add_chat_message(&conn, cid, "assistant", "Достигнут лимит шагов агента, проверь галерею.", &actions);
+        }
+    }
     Ok(AgentReply {
         reply: "Достигнут лимит шагов агента. Часть действий могла выполниться, проверь галерею.".into(),
         actions,
@@ -425,4 +448,105 @@ pub async fn llm_autodescribe_missing(state: State<'_, Db>) -> R<usize> {
         }
     }
     Ok(done)
+}
+
+// ──────────────────────── chat history ───────────────────
+
+#[tauri::command]
+pub fn list_chats(state: State<Db>) -> R<Vec<ChatSession>> {
+    let conn = state.0.lock().map_err(e)?;
+    db::list_chats(&conn).map_err(e)
+}
+
+#[tauri::command]
+pub fn create_chat(state: State<Db>, title: Option<String>) -> R<i64> {
+    let conn = state.0.lock().map_err(e)?;
+    db::create_chat(&conn, &title.unwrap_or_else(|| "Новый чат".into())).map_err(e)
+}
+
+#[tauri::command]
+pub fn rename_chat(state: State<Db>, id: i64, title: String) -> R<()> {
+    let conn = state.0.lock().map_err(e)?;
+    db::rename_chat(&conn, id, &title).map_err(e)
+}
+
+#[tauri::command]
+pub fn delete_chat(state: State<Db>, id: i64) -> R<()> {
+    let conn = state.0.lock().map_err(e)?;
+    db::delete_chat(&conn, id).map_err(e)
+}
+
+#[tauri::command]
+pub fn list_chat_messages(state: State<Db>, chat_id: i64) -> R<Vec<StoredChatMessage>> {
+    let conn = state.0.lock().map_err(e)?;
+    db::list_chat_messages(&conn, chat_id).map_err(e)
+}
+
+// ──────────────────────── discover ───────────────────
+
+fn hits_to_repohits(conn: &rusqlite::Connection, hits: Vec<crate::github::SearchHit>) -> Vec<RepoHit> {
+    hits.into_iter()
+        .map(|h| {
+            let already_saved: bool = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM projects WHERE repo_url = ?1",
+                    [&h.html_url],
+                    |r| r.get::<_, i64>(0),
+                )
+                .map(|c| c > 0)
+                .unwrap_or(false);
+            RepoHit {
+                full_name: h.full_name,
+                description: h.description,
+                html_url: h.html_url,
+                language: h.language,
+                stars: h.stars,
+                forks: h.forks,
+                topics: h.topics,
+                pushed_at: h.pushed_at,
+                gh_created_at: h.gh_created_at,
+                already_saved,
+            }
+        })
+        .collect()
+}
+
+/// Поиск репозиториев на GitHub по произвольному запросу.
+#[tauri::command]
+pub async fn search_github(state: State<'_, Db>, query: String) -> R<Vec<RepoHit>> {
+    let token = secrets::get_secret(secrets::GITHUB_TOKEN).ok().flatten();
+    let hits = github::search_repos(&query, token.as_deref(), 30).await.map_err(e)?;
+    let conn = state.0.lock().map_err(e)?;
+    Ok(hits_to_repohits(&conn, hits))
+}
+
+/// Находит похожие репозитории на заданный проект (по языку и тегам).
+#[tauri::command]
+pub async fn find_similar(state: State<'_, Db>, project_id: i64) -> R<Vec<RepoHit>> {
+    let (query, own_url) = {
+        let conn = state.0.lock().map_err(e)?;
+        let p = db::get_project(&conn, project_id).map_err(e)?;
+        let mut parts: Vec<String> = Vec::new();
+        for t in p.tags.iter().take(3) {
+            parts.push(format!("topic:{t}"));
+        }
+        if let Some(lang) = &p.language {
+            if !lang.is_empty() {
+                parts.push(format!("language:{lang}"));
+            }
+        }
+        if parts.is_empty() {
+            parts.push(p.title.clone());
+        }
+        parts.push("stars:>10".into());
+        (parts.join(" "), p.repo_url.clone())
+    };
+    let token = secrets::get_secret(secrets::GITHUB_TOKEN).ok().flatten();
+    let hits = github::search_repos(&query, token.as_deref(), 24).await.map_err(e)?;
+    let conn = state.0.lock().map_err(e)?;
+    let mut out = hits_to_repohits(&conn, hits);
+    if let Some(u) = own_url {
+        out.retain(|h| h.html_url != u);
+    }
+    Ok(out)
 }

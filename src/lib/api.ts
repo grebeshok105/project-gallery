@@ -3,10 +3,13 @@ import type {
   Achievement,
   AppConfig,
   ChatMessage,
+  ChatSession,
   Project,
   ProjectFilter,
   ProjectInput,
+  RepoHit,
   Stats,
+  StoredChatMessage,
 } from "./types";
 
 export const api = {
@@ -53,8 +56,22 @@ export const api = {
     invoke<string>("llm_chat", { messages }),
   llmProjectIdeas: (projectId: number, mode: "ideas" | "description" | "tags") =>
     invoke<string>("llm_project_ideas", { projectId, mode }),
-  llmAgentChat: (messages: ChatMessage[]) =>
-    invoke<{ reply: string; actions: string[] }>("llm_agent_chat", { messages }),
-  llmAutodescribeMissing: () =>
-    invoke<number>("llm_autodescribe_missing"),
+  llmAgentChat: (messages: ChatMessage[], chatId?: number) =>
+    invoke<{ reply: string; actions: string[] }>("llm_agent_chat", {
+      messages,
+      chatId: chatId ?? null,
+    }),
+  llmAutodescribeMissing: () => invoke<number>("llm_autodescribe_missing"),
+
+  // chat history
+  listChats: () => invoke<ChatSession[]>("list_chats"),
+  createChat: (title?: string) => invoke<number>("create_chat", { title: title ?? null }),
+  renameChat: (id: number, title: string) => invoke<void>("rename_chat", { id, title }),
+  deleteChat: (id: number) => invoke<void>("delete_chat", { id }),
+  listChatMessages: (chatId: number) =>
+    invoke<StoredChatMessage[]>("list_chat_messages", { chatId }),
+
+  // discover
+  searchGithub: (query: string) => invoke<RepoHit[]>("search_github", { query }),
+  findSimilar: (projectId: number) => invoke<RepoHit[]>("find_similar", { projectId }),
 };

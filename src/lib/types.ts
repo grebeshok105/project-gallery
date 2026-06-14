@@ -16,9 +16,37 @@ export interface Project {
   source: "manual" | "github";
   github_id: number | null;
   pushed_at: string | null;
+  gh_created_at: string | null;
   created_at: string;
   updated_at: string;
   tags: string[];
+}
+
+export interface ChatSession {
+  id: number;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StoredChatMessage {
+  id: number;
+  role: "user" | "assistant";
+  content: string;
+  actions: string[];
+}
+
+export interface RepoHit {
+  full_name: string;
+  description: string;
+  html_url: string;
+  language: string | null;
+  stars: number;
+  forks: number;
+  topics: string[];
+  pushed_at: string | null;
+  gh_created_at: string | null;
+  already_saved: boolean;
 }
 
 export interface ProjectInput {

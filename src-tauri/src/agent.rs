@@ -42,6 +42,11 @@ pub fn tools() -> Value {
             "properties": {"id": {"type": "integer"}, "tags": {"type": "array", "items": {"type": "string"}}},
             "required": ["id","tags"]
         })),
+        tool("set_project_language", "Задать язык/стек проекта.", json!({
+            "type": "object",
+            "properties": {"id": {"type": "integer"}, "language": {"type": "string"}},
+            "required": ["id","language"]
+        })),
         tool("list_achievements", "Список всех достижений (авто и кастомных) с прогрессом.", json!({"type":"object","properties":{}})),
         tool("create_achievement", "Создать новую кастомную цель-достижение.", json!({
             "type": "object",
@@ -157,6 +162,16 @@ pub fn dispatch(conn: &Connection, name: &str, args: &Value) -> Result<ToolOutco
             ok(
                 "Теги добавлены.".into(),
                 Some(format!("Теги для «{}»: +{}", p.title, tags.join(", "))),
+            )
+        }
+        "set_project_language" => {
+            let id = i64_arg(args, "id")?;
+            let language = str_arg(args, "language")?;
+            db::set_language(conn, id, &language)?;
+            let p = db::get_project(conn, id)?;
+            ok(
+                "Язык обновлён.".into(),
+                Some(format!("Язык «{}» → {}", p.title, language)),
             )
         }
         "list_achievements" => {

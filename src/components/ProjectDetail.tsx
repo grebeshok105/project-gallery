@@ -122,7 +122,10 @@ export function ProjectDetail({ project, onClose, onEdit }: Props) {
               <div className="mt-6 grid grid-cols-2 gap-3 text-sm">
                 <Info label="Источник" value={project.source === "github" ? "GitHub" : "Вручную"} />
                 <Info label="Обновлён" value={relativeDate(project.updated_at)} />
-                <Info label="Создан" value={relativeDate(project.created_at)} />
+                <Info
+                  label={project.gh_created_at ? "Создан репо" : "Добавлен"}
+                  value={relativeDate(project.gh_created_at ?? project.created_at)}
+                />
                 {project.pushed_at && <Info label="Коммит" value={relativeDate(project.pushed_at)} />}
               </div>
 

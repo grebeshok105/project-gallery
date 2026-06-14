@@ -47,6 +47,13 @@ pub fn run() {
             commands::llm_project_ideas,
             commands::llm_agent_chat,
             commands::llm_autodescribe_missing,
+            commands::list_chats,
+            commands::create_chat,
+            commands::rename_chat,
+            commands::delete_chat,
+            commands::list_chat_messages,
+            commands::search_github,
+            commands::find_similar,
         ])
         .run(tauri::generate_context!())
         .expect("ошибка запуска приложения Tauri");

@@ -1,13 +1,15 @@
 import {
-  SquaresFour, Trophy, Sparkle, GearSix, Stack,
+  SquaresFour, Trophy, Sparkle, GearSix, Stack, Compass, ChartBar,
 } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { useStore } from "@/lib/store";
 
-export type Tab = "gallery" | "achievements" | "assistant" | "settings";
+export type Tab = "gallery" | "discover" | "stats" | "achievements" | "assistant" | "settings";
 
 const ITEMS: { id: Tab; label: string; icon: typeof SquaresFour }[] = [
   { id: "gallery", label: "Галерея", icon: SquaresFour },
+  { id: "discover", label: "Поиск репо", icon: Compass },
+  { id: "stats", label: "Статистика", icon: ChartBar },
   { id: "achievements", label: "Достижения", icon: Trophy },
   { id: "assistant", label: "Агент", icon: Sparkle },
   { id: "settings", label: "Настройки", icon: GearSix },

@@ -1,4 +1,4 @@
-//! Импорт репозиториев пользователя с GitHub.
+//! Импорт и поиск репозиториев GitHub.
 //! Токен необязателен (публичные репо доступны без него), но с токеном
 //! поднимается лимит запросов и видны приватные репозитории.
 
@@ -14,9 +14,12 @@ struct GhRepo {
     homepage: Option<String>,
     language: Option<String>,
     stargazers_count: i64,
+    #[serde(default)]
+    forks_count: i64,
     fork: bool,
     archived: bool,
     pushed_at: Option<String>,
+    created_at: Option<String>,
     #[serde(default)]
     topics: Vec<String>,
 }
@@ -33,7 +36,38 @@ pub struct ImportedRepo {
     pub stars: i64,
     pub archived: bool,
     pub pushed_at: Option<String>,
+    pub gh_created_at: Option<String>,
     pub topics: Vec<String>,
+}
+
+/// Результат поиска (для Discover / похожих репо).
+#[derive(Debug, Clone)]
+pub struct SearchHit {
+    pub full_name: String,
+    pub description: String,
+    pub html_url: String,
+    pub language: Option<String>,
+    pub stars: i64,
+    pub forks: i64,
+    pub topics: Vec<String>,
+    pub pushed_at: Option<String>,
+    pub gh_created_at: Option<String>,
+}
+
+fn client() -> reqwest::Result<reqwest::Client> {
+    reqwest::Client::builder().user_agent("project-gallery").build()
+}
+
+fn auth(req: reqwest::RequestBuilder, token: Option<&str>) -> reqwest::RequestBuilder {
+    let mut req = req
+        .header("Accept", "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28");
+    if let Some(t) = token {
+        if !t.is_empty() {
+            req = req.header("Authorization", format!("Bearer {t}"));
+        }
+    }
+    req
 }
 
 pub async fn fetch_user_repos(
@@ -41,26 +75,14 @@ pub async fn fetch_user_repos(
     token: Option<&str>,
     include_forks: bool,
 ) -> anyhow::Result<Vec<ImportedRepo>> {
-    let client = reqwest::Client::builder()
-        .user_agent("project-gallery")
-        .build()?;
-
+    let client = client()?;
     let mut out = Vec::new();
     let mut page = 1u32;
     loop {
         let url = format!(
             "https://api.github.com/users/{username}/repos?per_page=100&page={page}&sort=pushed"
         );
-        let mut req = client
-            .get(&url)
-            .header("Accept", "application/vnd.github+json")
-            .header("X-GitHub-Api-Version", "2022-11-28");
-        if let Some(t) = token {
-            if !t.is_empty() {
-                req = req.header("Authorization", format!("Bearer {t}"));
-            }
-        }
-        let resp = req.send().await?;
+        let resp = auth(client.get(&url), token).send().await?;
         if !resp.status().is_success() {
             let code = resp.status();
             let body = resp.text().await.unwrap_or_default();
@@ -85,6 +107,7 @@ pub async fn fetch_user_repos(
                 stars: r.stargazers_count,
                 archived: r.archived,
                 pushed_at: r.pushed_at,
+                gh_created_at: r.created_at,
                 topics: r.topics,
             });
             let _ = r.full_name;
@@ -94,8 +117,64 @@ pub async fn fetch_user_repos(
         }
         page += 1;
         if page > 10 {
-            break; // предохранитель
+            break;
         }
     }
     Ok(out)
+}
+
+#[derive(Debug, Deserialize)]
+struct SearchResponse {
+    items: Vec<GhRepo>,
+}
+
+/// Поиск репозиториев по произвольному GitHub-запросу.
+pub async fn search_repos(
+    query: &str,
+    token: Option<&str>,
+    limit: u32,
+) -> anyhow::Result<Vec<SearchHit>> {
+    let client = client()?;
+    let per = limit.min(50).max(1);
+    let url = format!(
+        "https://api.github.com/search/repositories?q={}&sort=stars&order=desc&per_page={per}",
+        urlencoding(query)
+    );
+    let resp = auth(client.get(&url), token).send().await?;
+    if !resp.status().is_success() {
+        let code = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        anyhow::bail!("GitHub Search {code}: {body}");
+    }
+    let parsed: SearchResponse = resp.json().await?;
+    Ok(parsed
+        .items
+        .into_iter()
+        .map(|r| SearchHit {
+            full_name: r.full_name,
+            description: r.description.unwrap_or_default(),
+            html_url: r.html_url,
+            language: r.language,
+            stars: r.stargazers_count,
+            forks: r.forks_count,
+            topics: r.topics,
+            pushed_at: r.pushed_at,
+            gh_created_at: r.created_at,
+        })
+        .collect())
+}
+
+/// Минимальное url-кодирование для строки запроса.
+fn urlencoding(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() * 3);
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char)
+            }
+            b' ' => out.push_str("%20"),
+            _ => out.push_str(&format!("%{:02X}", b)),
+        }
+    }
+    out
 }

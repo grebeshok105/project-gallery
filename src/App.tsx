@@ -6,6 +6,8 @@ import { GalleryView } from "./views/GalleryView";
 import { AchievementsView } from "./views/AchievementsView";
 import { AssistantView } from "./views/AssistantView";
 import { SettingsView } from "./views/SettingsView";
+import { DiscoverView } from "./views/DiscoverView";
+import { StatsView } from "./views/StatsView";
 import { useStore } from "./lib/store";
 
 const SPRING = [0.32, 0.72, 0, 1] as const;
@@ -41,6 +43,9 @@ export default function App() {
             className="h-full"
           >
             {tab === "gallery" && <GalleryView />}
+            {tab === "discover" && <DiscoverView />}
+            {tab === "stats" && <StatsView />}
+            {tab === "achievements" && <AchievementsView />}
             {tab === "achievements" && <AchievementsView />}
             {tab === "assistant" && <AssistantView />}
             {tab === "settings" && <SettingsView />}

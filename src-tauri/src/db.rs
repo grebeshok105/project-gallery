@@ -7,14 +7,22 @@ use std::sync::Mutex;
 /// Состояние приложения с соединением к SQLite.
 pub struct Db(pub Mutex<Connection>);
 
-const MIGRATION: &str = include_str!("../migrations/0001_init.sql");
+const MIGRATION_V1: &str = include_str!("../migrations/0001_init.sql");
+const MIGRATION_V2: &str = include_str!("../migrations/0002_v2.sql");
 
 pub fn open(app_dir: PathBuf) -> Result<Connection> {
     std::fs::create_dir_all(&app_dir)?;
     let path = app_dir.join("gallery.db");
     let conn = Connection::open(path)?;
     conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
-    conn.execute_batch(MIGRATION)?;
+
+    // Идемпотентные миграции по PRAGMA user_version.
+    let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+    conn.execute_batch(MIGRATION_V1)?; // CREATE IF NOT EXISTS / INSERT OR IGNORE — безопасно
+    if version < 2 {
+        conn.execute_batch(MIGRATION_V2)?;
+        conn.execute_batch("PRAGMA user_version = 2;")?;
+    }
     Ok(conn)
 }
 
@@ -65,6 +73,7 @@ fn row_to_project(conn: &Connection, r: &rusqlite::Row) -> rusqlite::Result<Proj
         source: r.get("source")?,
         github_id: r.get("github_id")?,
         pushed_at: r.get("pushed_at")?,
+        gh_created_at: r.get("gh_created_at")?,
         created_at: r.get("created_at")?,
         updated_at: r.get("updated_at")?,
         tags: tags_for(conn, id).unwrap_or_default(),
@@ -228,6 +237,87 @@ pub fn add_tags(conn: &Connection, id: i64, tags: &[String]) -> Result<()> {
     conn.execute(
         "UPDATE projects SET updated_at=datetime('now') WHERE id=?1",
         [id],
+    )?;
+    Ok(())
+}
+
+pub fn set_language(conn: &Connection, id: i64, language: &str) -> Result<()> {
+    conn.execute(
+        "UPDATE projects SET language=?1, updated_at=datetime('now') WHERE id=?2",
+        params![language, id],
+    )?;
+    Ok(())
+}
+
+// ──────────────────────── chat history ───────────────────
+
+pub fn list_chats(conn: &Connection) -> Result<Vec<ChatSession>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, title, created_at, updated_at FROM chat_sessions ORDER BY updated_at DESC",
+    )?;
+    let rows = stmt.query_map([], |r| {
+        Ok(ChatSession {
+            id: r.get(0)?,
+            title: r.get(1)?,
+            created_at: r.get(2)?,
+            updated_at: r.get(3)?,
+        })
+    })?;
+    Ok(rows.filter_map(|r| r.ok()).collect())
+}
+
+pub fn create_chat(conn: &Connection, title: &str) -> Result<i64> {
+    conn.execute("INSERT INTO chat_sessions(title) VALUES (?1)", params![title])?;
+    Ok(conn.last_insert_rowid())
+}
+
+pub fn rename_chat(conn: &Connection, id: i64, title: &str) -> Result<()> {
+    conn.execute(
+        "UPDATE chat_sessions SET title=?1, updated_at=datetime('now') WHERE id=?2",
+        params![title, id],
+    )?;
+    Ok(())
+}
+
+pub fn delete_chat(conn: &Connection, id: i64) -> Result<()> {
+    conn.execute("DELETE FROM chat_sessions WHERE id=?1", [id])?;
+    Ok(())
+}
+
+pub fn list_chat_messages(conn: &Connection, chat_id: i64) -> Result<Vec<StoredChatMessage>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, role, content, actions FROM chat_messages WHERE chat_id=?1 ORDER BY id",
+    )?;
+    let rows = stmt.query_map([chat_id], |r| {
+        let actions_raw: Option<String> = r.get(3)?;
+        let actions: Vec<String> = actions_raw
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default();
+        Ok(StoredChatMessage {
+            id: r.get(0)?,
+            role: r.get(1)?,
+            content: r.get(2)?,
+            actions,
+        })
+    })?;
+    Ok(rows.filter_map(|r| r.ok()).collect())
+}
+
+pub fn add_chat_message(
+    conn: &Connection,
+    chat_id: i64,
+    role: &str,
+    content: &str,
+    actions: &[String],
+) -> Result<()> {
+    let actions_json = serde_json::to_string(actions).unwrap_or_else(|_| "[]".into());
+    conn.execute(
+        "INSERT INTO chat_messages(chat_id, role, content, actions) VALUES (?1,?2,?3,?4)",
+        params![chat_id, role, content, actions_json],
+    )?;
+    conn.execute(
+        "UPDATE chat_sessions SET updated_at=datetime('now') WHERE id=?1",
+        [chat_id],
     )?;
     Ok(())
 }

@@ -1,0 +1,25 @@
+name: Check (fast)
+
+# Быстрая проверка без упаковки .exe: типы фронта + cargo check бэкенда.
+# Запускается вручную, чтобы ловить ошибки за ~3-4 мин до полной сборки.
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Install frontend deps
+        run: npm install
+      - name: Typecheck + frontend build
+        run: npm run build
+      - name: Cargo check
+        run: cargo check --manifest-path src-tauri/Cargo.toml

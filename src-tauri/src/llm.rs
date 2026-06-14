@@ -16,6 +16,7 @@ struct ChatRequest<'a> {
     model: &'a str,
     messages: &'a [ChatMessage],
     temperature: f32,
+    max_tokens: u32,
 }
 
 #[derive(Deserialize)]
@@ -53,7 +54,10 @@ pub async fn chat(cfg: &LlmConfig, messages: &[ChatMessage]) -> anyhow::Result<S
     let body = ChatRequest {
         model: &cfg.model,
         messages,
-        temperature: 0.8,
+        temperature: 0.6,
+        // Щедрый лимит: reasoning-модели (напр. minimax-m3) тратят часть
+        // токенов на размышления, иначе content приходит пустым.
+        max_tokens: 8192,
     };
 
     let mut req = client.post(&url).json(&body);

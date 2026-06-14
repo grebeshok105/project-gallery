@@ -103,7 +103,7 @@ export function SettingsView() {
               className="input"
               value={llmBase}
               onChange={(e) => setLlmBase(e.target.value)}
-              placeholder="https://api.openai.com/v1"
+              placeholder="https://api.fireworks.ai/inference/v1"
             />
           </Field>
           <Field label="Модель">
@@ -111,7 +111,7 @@ export function SettingsView() {
               className="input"
               value={llmModel}
               onChange={(e) => setLlmModel(e.target.value)}
-              placeholder="gpt-4o-mini"
+              placeholder="accounts/fireworks/models/minimax-m3"
             />
           </Field>
           <Field

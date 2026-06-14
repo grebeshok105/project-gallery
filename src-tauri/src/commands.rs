@@ -123,8 +123,8 @@ pub fn get_config(state: State<Db>) -> R<serde_json::Value> {
     Ok(serde_json::json!({
         "github_username": get("github_username").unwrap_or_default(),
         "github_include_forks": get("github_include_forks").unwrap_or_else(|| "false".into()),
-        "llm_base_url": get("llm_base_url").unwrap_or_else(|| "https://api.openai.com/v1".into()),
-        "llm_model": get("llm_model").unwrap_or_default(),
+        "llm_base_url": get("llm_base_url").unwrap_or_else(|| "https://api.fireworks.ai/inference/v1".into()),
+        "llm_model": get("llm_model").unwrap_or_else(|| "accounts/fireworks/models/minimax-m3".into()),
         "has_github_token": secrets::has_secret(secrets::GITHUB_TOKEN),
         "has_llm_key": secrets::has_secret(secrets::LLM_API_KEY),
     }))
@@ -219,11 +219,11 @@ fn llm_config(conn: &rusqlite::Connection) -> LlmConfig {
     let base_url = db::get_setting(conn, "llm_base_url")
         .ok()
         .flatten()
-        .unwrap_or_else(|| "https://api.openai.com/v1".into());
+        .unwrap_or_else(|| "https://api.fireworks.ai/inference/v1".into());
     let model = db::get_setting(conn, "llm_model")
         .ok()
         .flatten()
-        .unwrap_or_default();
+        .unwrap_or_else(|| "accounts/fireworks/models/minimax-m3".into());
     let api_key = secrets::get_secret(secrets::LLM_API_KEY).ok().flatten();
     LlmConfig {
         base_url,

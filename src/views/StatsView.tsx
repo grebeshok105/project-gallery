@@ -6,7 +6,7 @@ import { Reveal } from "@/components/Reveal";
 import { colorFor } from "@/lib/utils";
 
 export function StatsView() {
-  const { projects, stats, achievements, refreshAchievements } = useStore();
+  const { projects, stats, refreshAchievements } = useStore();
 
   useEffect(() => {
     void refreshAchievements();

@@ -36,13 +36,8 @@ export const api = {
   checkNewAchievements: () => invoke<Achievement[]>("check_new_achievements"),
   createCustomAchievement: (input: CustomAchievementInput) =>
     invoke<number>("create_custom_achievement", { input }),
-    title: string;
-    description: string;
-    icon: string;
-  }) => invoke<number>("create_custom_achievement", { input }),
   toggleCustomAchievement: (id: number) =>
     invoke<void>("toggle_custom_achievement", { id }),
-  deleteCustomAchievement: (id: number) =>
   deleteCustomAchievement: (id: number) =>
     invoke<void>("delete_custom_achievement", { id }),
   bulkDeleteAchievements: (ids: number[]) =>

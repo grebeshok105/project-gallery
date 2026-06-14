@@ -2,6 +2,22 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   Achievement,
   AppConfig,
+  BlacklistEntry,
+  ChatMessage,
+  ChatSession,
+  CustomAchievementInput,
+  McpServer,
+  McpTool,
+  Project,
+  ProjectFilter,
+  ProjectInput,
+  RepoActivity,
+  RepoHit,
+  Stats,
+  StoredChatMessage,
+} from "./types";
+  Achievement,
+  AppConfig,
   ChatMessage,
   ChatSession,
   Project,
@@ -29,7 +45,8 @@ export const api = {
   // achievements
   listAchievements: () => invoke<Achievement[]>("list_achievements"),
   checkNewAchievements: () => invoke<Achievement[]>("check_new_achievements"),
-  createCustomAchievement: (input: {
+  createCustomAchievement: (input: CustomAchievementInput) =>
+    invoke<number>("create_custom_achievement", { input }),
     title: string;
     description: string;
     icon: string;
@@ -37,7 +54,10 @@ export const api = {
   toggleCustomAchievement: (id: number) =>
     invoke<void>("toggle_custom_achievement", { id }),
   deleteCustomAchievement: (id: number) =>
+  deleteCustomAchievement: (id: number) =>
     invoke<void>("delete_custom_achievement", { id }),
+  bulkDeleteAchievements: (ids: number[]) =>
+    invoke<number>("bulk_delete_achievements", { ids }),
 
   // settings & secrets
   getConfig: () => invoke<AppConfig>("get_config"),
@@ -74,4 +94,24 @@ export const api = {
   // discover
   searchGithub: (query: string) => invoke<RepoHit[]>("search_github", { query }),
   findSimilar: (projectId: number) => invoke<RepoHit[]>("find_similar", { projectId }),
+
+  // activity
+  refreshRepoActivity: (projectId: number) =>
+    invoke<RepoActivity>("refresh_repo_activity", { projectId }),
+
+  // blacklist
+  listBlacklist: () => invoke<BlacklistEntry[]>("list_blacklist"),
+  addToBlacklist: (githubId: number | null, repoUrl: string) =>
+    invoke<void>("add_to_blacklist", { githubId, repoUrl }),
+  removeFromBlacklist: (id: number) =>
+    invoke<void>("remove_from_blacklist", { id }),
+
+  // mcp servers
+  listMcpServers: () => invoke<McpServer[]>("list_mcp_servers"),
+  addMcpServer: (input: { name: string; url: string; api_key: string | null }) =>
+    invoke<number>("add_mcp_server", { input }),
+  removeMcpServer: (id: number) => invoke<void>("remove_mcp_server", { id }),
+  toggleMcpServer: (id: number) => invoke<boolean>("toggle_mcp_server", { id }),
+  mcpListTools: (serverId: number) =>
+    invoke<McpTool[]>("mcp_list_tools", { serverId }),
 };

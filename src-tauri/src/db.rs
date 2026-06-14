@@ -9,6 +9,7 @@ pub struct Db(pub Mutex<Connection>);
 
 const MIGRATION_V1: &str = include_str!("../migrations/0001_init.sql");
 const MIGRATION_V2: &str = include_str!("../migrations/0002_v2.sql");
+const MIGRATION_V3: &str = include_str!("../migrations/0003_v3.sql");
 
 pub fn open(app_dir: PathBuf) -> Result<Connection> {
     std::fs::create_dir_all(&app_dir)?;
@@ -22,6 +23,10 @@ pub fn open(app_dir: PathBuf) -> Result<Connection> {
     if version < 2 {
         conn.execute_batch(MIGRATION_V2)?;
         conn.execute_batch("PRAGMA user_version = 2;")?;
+    }
+    if version < 3 {
+        conn.execute_batch(MIGRATION_V3)?;
+        conn.execute_batch("PRAGMA user_version = 3;")?;
     }
     Ok(conn)
 }
@@ -62,6 +67,7 @@ fn row_to_project(conn: &Connection, r: &rusqlite::Row) -> rusqlite::Result<Proj
         id,
         title: r.get("title")?,
         description: r.get("description")?,
+        summary: r.get("summary").unwrap_or_default(),
         status: r.get("status")?,
         kind: r.get("kind")?,
         cover: r.get("cover")?,
@@ -69,6 +75,10 @@ fn row_to_project(conn: &Connection, r: &rusqlite::Row) -> rusqlite::Result<Proj
         homepage_url: r.get("homepage_url")?,
         language: r.get("language")?,
         stars: r.get("stars")?,
+        activity_score: r.get("activity_score").unwrap_or(0),
+        open_prs: r.get("open_prs").unwrap_or(0),
+        last_commit_at: r.get("last_commit_at")?,
+        last_commit_msg: r.get("last_commit_msg")?,
         favorite: r.get::<_, i64>("favorite")? != 0,
         source: r.get("source")?,
         github_id: r.get("github_id")?,
@@ -97,6 +107,12 @@ pub fn list_projects(conn: &Connection, f: &ProjectFilter) -> Result<Vec<Project
     if let Some(true) = f.favorite_only {
         sql.push_str(" AND favorite = 1");
     }
+    if let Some(true) = f.archived_only {
+        sql.push_str(" AND status = 'archived'");
+    } else if let None = f.include_archived {
+        // по умолчанию архивированные не показываем
+        sql.push_str(" AND status != 'archived'");
+    }
     if let Some(q) = &f.search {
         if !q.is_empty() {
             let q = q.replace('\'', "''");
@@ -109,6 +125,7 @@ pub fn list_projects(conn: &Connection, f: &ProjectFilter) -> Result<Vec<Project
         Some("created") => "created_at DESC",
         Some("title") => "title COLLATE NOCASE ASC",
         Some("stars") => "stars DESC",
+        Some("activity") => "activity_score DESC",
         _ => "updated_at DESC",
     };
     sql.push_str(&format!(" ORDER BY favorite DESC, {order}"));
@@ -136,8 +153,8 @@ pub fn get_project(conn: &Connection, id: i64) -> Result<Project> {
 
 pub fn create_project(conn: &Connection, input: &ProjectInput) -> Result<i64> {
     conn.execute(
-        "INSERT INTO projects (title, description, status, kind, cover, repo_url, homepage_url, language, favorite, source)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,'manual')",
+        "INSERT INTO projects (title, description, summary, status, kind, cover, repo_url, homepage_url, language, favorite, source)
+         VALUES (?1,?2,'',?3,?4,?5,?6,?7,?8,?9,'manual')",
         params![
             input.title, input.description, input.status, input.kind, input.cover,
             input.repo_url, input.homepage_url, input.language, input.favorite as i64
@@ -211,10 +228,33 @@ pub fn set_description(conn: &Connection, id: i64, description: &str) -> Result<
     Ok(())
 }
 
+pub fn set_summary(conn: &Connection, id: i64, summary: &str) -> Result<()> {
+    conn.execute(
+        "UPDATE projects SET summary=?1, updated_at=datetime('now') WHERE id=?2",
+        params![summary, id],
+    )?;
+    Ok(())
+}
+
 pub fn set_status(conn: &Connection, id: i64, status: &str) -> Result<()> {
     conn.execute(
         "UPDATE projects SET status=?1, updated_at=datetime('now') WHERE id=?2",
         params![status, id],
+    )?;
+    Ok(())
+}
+
+pub fn set_activity(
+    conn: &Connection,
+    id: i64,
+    score: i64,
+    open_prs: i64,
+    last_commit_at: Option<&str>,
+    last_commit_msg: Option<&str>,
+) -> Result<()> {
+    conn.execute(
+        "UPDATE projects SET activity_score=?1, open_prs=?2, last_commit_at=?3, last_commit_msg=?4, updated_at=datetime('now') WHERE id=?5",
+        params![score, open_prs, last_commit_at, last_commit_msg, id],
     )?;
     Ok(())
 }
@@ -247,6 +287,90 @@ pub fn set_language(conn: &Connection, id: i64, language: &str) -> Result<()> {
         params![language, id],
     )?;
     Ok(())
+}
+
+// ──────────────────────── blacklist ───────────────────
+
+pub fn add_to_blacklist(conn: &Connection, github_id: Option<i64>, repo_url: &str) -> Result<()> {
+    conn.execute(
+        "INSERT OR IGNORE INTO blacklist(github_id, repo_url) VALUES (?1, ?2)",
+        params![github_id, repo_url],
+    )?;
+    Ok(())
+}
+
+pub fn remove_from_blacklist(conn: &Connection, id: i64) -> Result<()> {
+    conn.execute("DELETE FROM blacklist WHERE id=?1", [id])?;
+    Ok(())
+}
+
+pub fn list_blacklist(conn: &Connection) -> Result<Vec<BlacklistEntry>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, github_id, repo_url, added_at FROM blacklist ORDER BY added_at DESC",
+    )?;
+    let rows = stmt.query_map([], |r| {
+        Ok(BlacklistEntry {
+            id: r.get(0)?,
+            github_id: r.get(1)?,
+            repo_url: r.get(2)?,
+            added_at: r.get(3)?,
+        })
+    })?;
+    Ok(rows.filter_map(|r| r.ok()).collect())
+}
+
+pub fn is_blacklisted(conn: &Connection, github_id: Option<i64>, repo_url: &str) -> Result<bool> {
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM blacklist WHERE (github_id IS NOT NULL AND github_id = ?1) OR repo_url = ?2",
+        params![github_id, repo_url],
+        |r| r.get(0),
+    )?;
+    Ok(count > 0)
+}
+
+// ──────────────────────── mcp_servers ───────────────────
+
+pub fn list_mcp_servers(conn: &Connection) -> Result<Vec<McpServer>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, name, url, enabled, api_key, created_at FROM mcp_servers ORDER BY name",
+    )?;
+    let rows = stmt.query_map([], |r| {
+        Ok(McpServer {
+            id: r.get(0)?,
+            name: r.get(1)?,
+            url: r.get(2)?,
+            enabled: r.get::<_, i64>(3)? != 0,
+            api_key: r.get(4)?,
+            created_at: r.get(5)?,
+        })
+    })?;
+    Ok(rows.filter_map(|r| r.ok()).collect())
+}
+
+pub fn add_mcp_server(conn: &Connection, name: &str, url: &str, api_key: Option<&str>) -> Result<i64> {
+    conn.execute(
+        "INSERT INTO mcp_servers(name, url, api_key) VALUES (?1, ?2, ?3)",
+        params![name, url, api_key],
+    )?;
+    Ok(conn.last_insert_rowid())
+}
+
+pub fn remove_mcp_server(conn: &Connection, id: i64) -> Result<()> {
+    conn.execute("DELETE FROM mcp_servers WHERE id=?1", [id])?;
+    Ok(())
+}
+
+pub fn toggle_mcp_server(conn: &Connection, id: i64) -> Result<bool> {
+    conn.execute(
+        "UPDATE mcp_servers SET enabled = 1 - enabled WHERE id=?1",
+        [id],
+    )?;
+    let enabled: i64 = conn.query_row(
+        "SELECT enabled FROM mcp_servers WHERE id=?1",
+        [id],
+        |r| r.get(0),
+    )?;
+    Ok(enabled != 0)
 }
 
 // ──────────────────────── chat history ───────────────────

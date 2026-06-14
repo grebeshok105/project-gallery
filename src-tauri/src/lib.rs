@@ -5,6 +5,7 @@ mod db;
 mod github;
 mod llm;
 mod models;
+mod mcp;
 mod secrets;
 
 use db::Db;
@@ -38,11 +39,13 @@ pub fn run() {
             commands::create_custom_achievement,
             commands::toggle_custom_achievement,
             commands::delete_custom_achievement,
+            commands::bulk_delete_achievements,
             commands::get_setting,
             commands::set_setting,
             commands::get_config,
             commands::set_secret,
             commands::import_github,
+            commands::refresh_repo_activity,
             commands::llm_chat,
             commands::llm_project_ideas,
             commands::llm_agent_chat,
@@ -52,7 +55,15 @@ pub fn run() {
             commands::rename_chat,
             commands::delete_chat,
             commands::list_chat_messages,
-            commands::search_github,
+            commands::find_similar,
+            commands::list_blacklist,
+            commands::add_to_blacklist,
+            commands::remove_from_blacklist,
+            commands::list_mcp_servers,
+            commands::add_mcp_server,
+            commands::remove_mcp_server,
+            commands::toggle_mcp_server,
+            commands::mcp_list_tools,
             commands::find_similar,
         ])
         .run(tauri::generate_context!())

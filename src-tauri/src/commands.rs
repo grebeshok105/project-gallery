@@ -12,6 +12,19 @@ fn e<E: std::fmt::Display>(err: E) -> String {
     err.to_string()
 }
 
+/// Приводит имя к виду, допустимому для OpenAI function name (^[a-zA-Z0-9_-]+$).
+fn sanitize_name(s: &str) -> String {
+    let out: String = s
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+        .collect();
+    if out.is_empty() {
+        "mcp".to_string()
+    } else {
+        out
+    }
+}
+
 // ───────────────────────── projects ─────────────────────────
 
 #[tauri::command]
@@ -103,6 +116,16 @@ pub fn delete_custom_achievement(state: State<Db>, id: i64) -> R<()> {
     achievements::delete_custom(&conn, id).map_err(e)
 }
 
+#[tauri::command]
+pub fn bulk_delete_achievements(state: State<Db>, ids: Vec<i64>) -> R<usize> {
+    let conn = state.0.lock().map_err(e)?;
+    let count = ids.len();
+    for id in ids {
+        let _ = achievements::delete_custom(&conn, id);
+    }
+    Ok(count)
+}
+
 // ───────────────────────── settings & secrets ─────────────────────────
 
 #[tauri::command]
@@ -164,6 +187,10 @@ pub async fn import_github(state: State<'_, Db>, username: String) -> R<usize> {
     let conn = state.0.lock().map_err(e)?;
     let mut imported = 0usize;
     for r in &repos {
+        // Пропускаем репо из чёрного списка.
+        if db::is_blacklisted(&conn, Some(r.github_id), &r.repo_url).unwrap_or(false) {
+            continue;
+        }
         let status = if r.archived { "archived" } else { "active" };
         // upsert по github_id: обновляем «живые» поля, не трогая ручные правки статуса/тегов сильно
         let changed = conn
@@ -214,6 +241,46 @@ pub async fn import_github(state: State<'_, Db>, username: String) -> R<usize> {
     db::set_setting(&conn, "github_username", &username).map_err(e)?;
     achievements::recompute(&conn).map_err(e)?;
     Ok(repos.len().min(imported.max(repos.len())))
+}
+
+#[tauri::command]
+pub async fn refresh_repo_activity(state: State<'_, Db>, project_id: i64) -> R<RepoActivity> {
+    // Читаем проект и токен до асинхронного вызова.
+    let (repo_url, stars, status) = {
+        let conn = state.0.lock().map_err(e)?;
+        let p = db::get_project(&conn, project_id).map_err(e)?;
+        (p.repo_url.clone(), p.stars, p.status.clone())
+    };
+    let token = secrets::get_secret(secrets::GITHUB_TOKEN).ok().flatten();
+
+    let url = repo_url.ok_or_else(|| "У проекта нет ссылки на репозиторий.".to_string())?;
+    let (owner, repo) = github::parse_owner_repo(&url)
+        .ok_or_else(|| "Не GitHub-репозиторий — активность недоступна.".to_string())?;
+
+    let raw = github::fetch_repo_activity(&owner, &repo, token.as_deref())
+        .await
+        .map_err(e)?;
+    let score = github::score_activity(raw.last_commit_at.as_deref(), raw.open_prs, stars, &status);
+
+    let activity = RepoActivity {
+        activity_score: score,
+        open_prs: raw.open_prs,
+        last_commit_at: raw.last_commit_at,
+        last_commit_msg: raw.last_commit_msg,
+    };
+    {
+        let conn = state.0.lock().map_err(e)?;
+        db::set_activity(
+            &conn,
+            project_id,
+            activity.activity_score,
+            activity.open_prs,
+            activity.last_commit_at.as_deref(),
+            activity.last_commit_msg.as_deref(),
+        )
+        .map_err(e)?;
+    }
+    Ok(activity)
 }
 
 // ───────────────────────── llm ─────────────────────────
@@ -295,9 +362,58 @@ pub async fn llm_agent_chat(
         llm_config(&conn)
     };
 
+    // Собираем summary проектов и включённые MCP-серверы (под одной блокировкой).
+    let (summaries, mcp_servers) = {
+        let conn = state.0.lock().map_err(e)?;
+        let filter = ProjectFilter {
+            include_archived: Some(true),
+            ..Default::default()
+        };
+        let projects = db::list_projects(&conn, &filter).unwrap_or_default();
+        let summaries: Vec<String> = projects
+            .iter()
+            .filter(|p| !p.summary.trim().is_empty())
+            .map(|p| format!("#{} {} — {}", p.id, p.title, p.summary))
+            .collect();
+        let enabled: Vec<McpServer> = db::list_mcp_servers(&conn)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|s| s.enabled)
+            .collect();
+        (summaries, enabled)
+    };
+
+    // Подтягиваем MCP-инструменты с включённых серверов (async, вне блокировки БД).
+    let mut mcp_tool_defs: Vec<serde_json::Value> = Vec::new();
+    let mut mcp_map: std::collections::HashMap<String, (String, Option<String>, String)> =
+        std::collections::HashMap::new();
+    for srv in &mcp_servers {
+        if let Ok(mcp_tools) = crate::mcp::list_tools(&srv.url, srv.api_key.as_deref()).await {
+            let prefix = sanitize_name(&srv.name);
+            for t in mcp_tools {
+                let full = format!("{}__{}", prefix, t.name);
+                mcp_tool_defs.push(serde_json::json!({
+                    "type": "function",
+                    "function": {"name": full, "description": t.description, "parameters": t.parameters}
+                }));
+                mcp_map.insert(full, (srv.url.clone(), srv.api_key.clone(), t.name.clone()));
+            }
+        }
+    }
+
+    // Системный промпт + summary проектов.
+    let mut system_content = crate::agent::SYSTEM_PROMPT.to_string();
+    if !summaries.is_empty() {
+        system_content.push_str("\n\nКраткие сводки проектов (id, название, summary):\n");
+        system_content.push_str(&summaries.join("\n"));
+    }
+    if !mcp_map.is_empty() {
+        system_content.push_str("\n\nДоступны внешние MCP-инструменты (имена с префиксом сервера). Используй их для справки по коду/докам, когда полезно.");
+    }
+
     // Строим начальный список сообщений: system + история от клиента.
     let mut msgs: Vec<serde_json::Value> = Vec::new();
-    msgs.push(serde_json::json!({"role": "system", "content": crate::agent::SYSTEM_PROMPT}));
+    msgs.push(serde_json::json!({"role": "system", "content": system_content}));
     for m in &messages {
         if m.role == "system" {
             continue;
@@ -310,7 +426,11 @@ pub async fn llm_agent_chat(
         .find(|m| m.role == "user")
         .map(|m| m.content.clone());
 
-    let tools = crate::agent::tools();
+    // Объединяем нативные тулзы с MCP.
+    let mut tools_vec = crate::agent::tools().as_array().cloned().unwrap_or_default();
+    tools_vec.extend(mcp_tool_defs);
+    let tools = serde_json::Value::Array(tools_vec);
+
     let mut actions: Vec<String> = Vec::new();
 
     for _ in 0..8 {
@@ -334,42 +454,42 @@ pub async fn llm_agent_chat(
 
         match tool_calls {
             Some(calls) if !calls.is_empty() => {
-                // Кладём сообщение ассистента с tool_calls обратно в историю
-                // (только разрешённые поля, без reasoning_content и прочего).
                 msgs.push(serde_json::json!({
                     "role": "assistant",
                     "content": choice.get("content").cloned().unwrap_or(serde_json::Value::Null),
                     "tool_calls": calls,
                 }));
-                // Исполняем каждый вызов под одной блокировкой БД.
-                {
-                    let conn = state.0.lock().map_err(e)?;
-                    for call in &calls {
-                        let id = call.get("id").and_then(|v| v.as_str()).unwrap_or("");
-                        let func = call.get("function").cloned().unwrap_or_default();
-                        let name = func.get("name").and_then(|v| v.as_str()).unwrap_or("");
-                        let args_raw = func
-                            .get("arguments")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("{}");
-                        let args: serde_json::Value =
-                            serde_json::from_str(args_raw).unwrap_or(serde_json::json!({}));
-                        let outcome = match crate::agent::dispatch(&conn, name, &args) {
-                            Ok(o) => o,
-                            Err(err) => crate::agent::ToolOutcome {
-                                result: format!("Ошибка инструмента: {err}"),
-                                action: None,
-                            },
-                        };
-                        if let Some(a) = outcome.action {
-                            actions.push(a);
+                // Обрабатываем каждый вызов: MCP — async без блокировки, локальные — под блокировкой.
+                for call in &calls {
+                    let id = call.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                    let func = call.get("function").cloned().unwrap_or_default();
+                    let name = func.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                    let args_raw = func.get("arguments").and_then(|v| v.as_str()).unwrap_or("{}");
+                    let args: serde_json::Value =
+                        serde_json::from_str(args_raw).unwrap_or(serde_json::json!({}));
+
+                    let (result_text, action) = if let Some((url, api_key, tool_name)) =
+                        mcp_map.get(&name)
+                    {
+                        match crate::mcp::call_tool(url, api_key.as_deref(), tool_name, args).await {
+                            Ok(text) => (text, Some(format!("MCP: {tool_name}"))),
+                            Err(err) => (format!("Ошибка MCP-инструмента: {err}"), None),
                         }
-                        msgs.push(serde_json::json!({
-                            "role": "tool",
-                            "tool_call_id": id,
-                            "content": outcome.result,
-                        }));
+                    } else {
+                        let conn = state.0.lock().map_err(e)?;
+                        match crate::agent::dispatch(&conn, &name, &args) {
+                            Ok(o) => (o.result, o.action),
+                            Err(err) => (format!("Ошибка инструмента: {err}"), None),
+                        }
+                    };
+                    if let Some(a) = action {
+                        actions.push(a);
                     }
+                    msgs.push(serde_json::json!({
+                        "role": "tool",
+                        "tool_call_id": id,
+                        "content": result_text,
+                    }));
                 }
             }
             _ => {
@@ -549,4 +669,63 @@ pub async fn find_similar(state: State<'_, Db>, project_id: i64) -> R<Vec<RepoHi
         out.retain(|h| h.html_url != u);
     }
     Ok(out)
+}
+
+// ──────────────────────── blacklist ───────────────────
+
+#[tauri::command]
+pub fn list_blacklist(state: State<Db>) -> R<Vec<BlacklistEntry>> {
+    let conn = state.0.lock().map_err(e)?;
+    db::list_blacklist(&conn).map_err(e)
+}
+
+#[tauri::command]
+pub fn add_to_blacklist(state: State<Db>, github_id: Option<i64>, repo_url: String) -> R<()> {
+    let conn = state.0.lock().map_err(e)?;
+    db::add_to_blacklist(&conn, github_id, &repo_url).map_err(e)
+}
+
+#[tauri::command]
+pub fn remove_from_blacklist(state: State<Db>, id: i64) -> R<()> {
+    let conn = state.0.lock().map_err(e)?;
+    db::remove_from_blacklist(&conn, id).map_err(e)
+}
+
+// ──────────────────────── mcp servers ───────────────────
+
+#[tauri::command]
+pub fn list_mcp_servers(state: State<Db>) -> R<Vec<McpServer>> {
+    let conn = state.0.lock().map_err(e)?;
+    db::list_mcp_servers(&conn).map_err(e)
+}
+
+#[tauri::command]
+pub fn add_mcp_server(state: State<Db>, input: McpServerInput) -> R<i64> {
+    let conn = state.0.lock().map_err(e)?;
+    db::add_mcp_server(&conn, &input.name, &input.url, input.api_key.as_deref()).map_err(e)
+}
+
+#[tauri::command]
+pub fn remove_mcp_server(state: State<Db>, id: i64) -> R<()> {
+    let conn = state.0.lock().map_err(e)?;
+    db::remove_mcp_server(&conn, id).map_err(e)
+}
+
+#[tauri::command]
+pub fn toggle_mcp_server(state: State<Db>, id: i64) -> R<bool> {
+    let conn = state.0.lock().map_err(e)?;
+    db::toggle_mcp_server(&conn, id).map_err(e)
+}
+
+#[tauri::command]
+pub async fn mcp_list_tools(state: State<'_, Db>, server_id: i64) -> R<Vec<crate::mcp::McpTool>> {
+    let (url, api_key) = {
+        let conn = state.0.lock().map_err(e)?;
+        let servers = db::list_mcp_servers(&conn).map_err(e)?;
+        servers.into_iter().find(|s| s.id == server_id)
+            .map(|s| (s.url, s.api_key))
+            .map(|s| s.url)
+            .ok_or_else(|| "MCP-сервер не найден".to_string())?
+    };
+    crate::mcp::list_tools(&url, api_key.as_deref()).await.map_err(e)
 }

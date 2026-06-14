@@ -1,7 +1,7 @@
 import { motion, useReducedMotion } from "framer-motion";
 import { Heart, Star } from "@phosphor-icons/react";
 import type { Project } from "@/lib/types";
-import { cn, colorFor, relativeDate } from "@/lib/utils";
+import { cn, colorFor, relativeDate, backgroundFor } from "@/lib/utils";
 import { StatusBadge } from "./Badge";
 
 const SPRING = [0.32, 0.72, 0, 1] as const;
@@ -16,6 +16,7 @@ interface Props {
 export function ProjectCard({ project, index = 0, onOpen, onFav }: Props) {
   const reduce = useReducedMotion();
   const accent = colorFor(project.language || project.title);
+  const bg = project.cover || backgroundFor(project.id || project.title);
 
   return (
     <motion.div
@@ -28,15 +29,18 @@ export function ProjectCard({ project, index = 0, onOpen, onFav }: Props) {
       <div className="bezel-core relative overflow-hidden">
         {/* header band, tinted to language hue, no AI-purple default */}
         <div
-          className="h-20 w-full"
+          className="relative h-20 w-full"
           style={{
-            background: project.cover
+            background: bg
               ? undefined
               : `radial-gradient(120% 120% at 85% -10%, ${accent}26, transparent 60%), linear-gradient(180deg, ${accent}14, transparent)`,
           }}
         >
-          {project.cover && (
-            <img src={project.cover} alt="" className="h-20 w-full object-cover opacity-80" />
+          {bg && (
+            <>
+              <img src={bg} alt="" className="h-20 w-full object-cover opacity-70" />
+              <div className="absolute inset-0 bg-gradient-to-t from-ink-raised via-ink-raised/40 to-transparent" />
+            </>
           )}
         </div>
 

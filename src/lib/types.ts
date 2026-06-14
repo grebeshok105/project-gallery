@@ -5,6 +5,7 @@ export interface Project {
   id: number;
   title: string;
   description: string;
+  summary: string;
   status: ProjectStatus;
   kind: ProjectKind;
   cover: string | null;
@@ -12,6 +13,10 @@ export interface Project {
   homepage_url: string | null;
   language: string | null;
   stars: number;
+  activity_score: number;
+  open_prs: number;
+  last_commit_at: string | null;
+  last_commit_msg: string | null;
   favorite: boolean;
   source: "manual" | "github";
   github_id: number | null;
@@ -68,7 +73,9 @@ export interface ProjectFilter {
   kind?: string;
   tag?: string;
   favorite_only?: boolean;
-  sort?: "updated" | "created" | "title" | "stars";
+  archived_only?: boolean;
+  include_archived?: boolean;
+  sort?: "updated" | "created" | "title" | "stars" | "activity";
 }
 
 export interface Achievement {
@@ -77,7 +84,7 @@ export interface Achievement {
   title: string;
   description: string;
   icon: string;
-  kind: "auto" | "custom";
+  kind: "auto" | "custom" | "manual" | "metric" | "milestone";
   metric: string | null;
   target: number;
   unlocked: boolean;
@@ -108,6 +115,44 @@ export interface AppConfig {
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
   content: string;
+}
+
+export interface BlacklistEntry {
+  id: number;
+  github_id: number | null;
+  repo_url: string;
+  added_at: string;
+}
+
+export interface McpServer {
+  id: number;
+  name: string;
+  url: string;
+  enabled: boolean;
+  api_key: string | null;
+  created_at: string;
+}
+
+export interface McpTool {
+  name: string;
+  description: string;
+  parameters: unknown;
+}
+
+export interface RepoActivity {
+  activity_score: number;
+  open_prs: number;
+  last_commit_at: string | null;
+  last_commit_msg: string | null;
+}
+
+export interface CustomAchievementInput {
+  title: string;
+  description: string;
+  icon: string;
+  kind: "manual" | "metric" | "milestone";
+  metric: string | null;
+  target: number | null;
 }
 
 export const STATUS_LABELS: Record<ProjectStatus, string> = {

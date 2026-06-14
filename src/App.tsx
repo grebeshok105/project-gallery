@@ -14,12 +14,14 @@ const SPRING = [0.32, 0.72, 0, 1] as const;
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("gallery");
-  const { refresh, refreshConfig } = useStore();
+  const { refresh, refreshConfig, loadAppearance } = useStore();
 
   useEffect(() => {
     void refresh();
     void refreshConfig();
-  }, [refresh, refreshConfig]);
+    void loadAppearance();
+    void refreshConfig();
+  }, [refresh, refreshConfig, loadAppearance]);
 
   return (
     <div className="grain relative flex h-[100dvh] w-screen overflow-hidden bg-ink text-fg">
@@ -45,7 +47,6 @@ export default function App() {
             {tab === "gallery" && <GalleryView />}
             {tab === "discover" && <DiscoverView />}
             {tab === "stats" && <StatsView />}
-            {tab === "achievements" && <AchievementsView />}
             {tab === "achievements" && <AchievementsView />}
             {tab === "assistant" && <AssistantView />}
             {tab === "settings" && <SettingsView />}

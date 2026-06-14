@@ -4,6 +4,8 @@ import { api } from "@/lib/api";
 import { useStore } from "@/lib/store";
 import type { ChatMessage, ChatSession } from "@/lib/types";
 import { cn, relativeDate } from "@/lib/utils";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 const SUGGESTIONS = [
   "Наведи порядок: напиши короткие описания всем проектам без описания",
@@ -218,11 +220,20 @@ function Bubble({ turn }: { turn: Turn }) {
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div className="max-w-[82%] space-y-2">
         <div
-          className={`whitespace-pre-wrap rounded-3xl px-4 py-3 text-sm leading-relaxed ${
-            isUser ? "bg-fg text-ink" : "border border-white/[0.06] bg-ink-raised text-fg shadow-inner-hi"
-          }`}
+          className={cn(
+            "rounded-3xl px-4 py-3 text-sm leading-relaxed",
+            isUser
+              ? "whitespace-pre-wrap bg-fg text-ink"
+              : "border border-white/[0.06] bg-ink-raised text-fg shadow-inner-hi"
+          )}
         >
-          {turn.content}
+          {isUser ? (
+            turn.content
+          ) : (
+            <div className="prose-chat">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{turn.content}</ReactMarkdown>
+            </div>
+          )}
         </div>
         {turn.actions && turn.actions.length > 0 && (
           <div className="flex flex-col gap-1 pl-1">

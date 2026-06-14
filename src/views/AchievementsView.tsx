@@ -16,7 +16,9 @@ export function AchievementsView() {
   }, [refreshAchievements]);
 
   const auto = achievements.filter((a) => a.kind === "auto");
-  const custom = achievements.filter((a) => a.kind === "custom");
+  const custom = achievements.filter((a) =>
+    ["custom", "manual", "metric", "milestone"].includes(a.kind)
+  );
   const unlocked = achievements.filter((a) => a.unlocked).length;
 
   return (
@@ -147,10 +149,20 @@ function AddCustom({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [icon, setIcon] = useState("target");
+  const [kind, setKind] = useState<"manual" | "metric" | "milestone">("manual");
+  const [metric, setMetric] = useState("projects_total");
+  const [target, setTarget] = useState(5);
 
   async function save() {
     if (!title.trim()) return;
-    await api.createCustomAchievement({ title, description, icon });
+    await api.createCustomAchievement({
+      title,
+      description,
+      icon,
+      kind,
+      metric: kind === "manual" ? null : metric,
+      target: kind === "manual" ? null : target,
+    });
     onSaved();
   }
 
@@ -168,6 +180,46 @@ function AddCustom({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
           <div className="space-y-3">
             <input className="input" placeholder="Например: зарелизить мод v5.0" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
             <input className="input" placeholder="Описание (необязательно)" value={description} onChange={(e) => setDescription(e.target.value)} />
+            <div>
+              <div className="mb-2 text-xs text-fg-dim">Тип цели</div>
+              <div className="flex gap-2">
+                {([
+                  ["manual", "Ручная"],
+                  ["metric", "По метрике"],
+                  ["milestone", "Веха"],
+                ] as const).map(([k, label]) => (
+                  <button
+                    key={k}
+                    onClick={() => setKind(k)}
+                    className={cn(
+                      "flex-1 rounded-2xl border px-3 py-2 text-xs transition-all duration-300 active:scale-95",
+                      kind === k ? "border-accent/50 bg-accent/15 text-accent" : "border-white/[0.08] text-fg-faint hover:text-fg"
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {kind !== "manual" && (
+              <div className="flex gap-2">
+                <select className="input flex-1" value={metric} onChange={(e) => setMetric(e.target.value)}>
+                  <option value="projects_total">Всего проектов</option>
+                  <option value="projects_done">Завершённых</option>
+                  <option value="languages">Языков</option>
+                  <option value="stars_total">Звёзд всего</option>
+                  <option value="favorites">Избранных</option>
+                  <option value="github_imported">Из GitHub</option>
+                </select>
+                <input
+                  type="number"
+                  className="input w-24"
+                  value={target}
+                  min={1}
+                  onChange={(e) => setTarget(Math.max(1, Number(e.target.value) || 1))}
+                />
+              </div>
+            )}
             <div>
               <div className="mb-2 text-xs text-fg-dim">Иконка</div>
               <div className="flex flex-wrap gap-2">

@@ -5,6 +5,8 @@ pub struct Project {
     pub id: i64,
     pub title: String,
     pub description: String,
+    #[serde(default)]
+    pub summary: String,
     pub status: String,
     pub kind: String,
     pub cover: Option<String>,
@@ -12,6 +14,12 @@ pub struct Project {
     pub homepage_url: Option<String>,
     pub language: Option<String>,
     pub stars: i64,
+    #[serde(default)]
+    pub activity_score: i64,
+    #[serde(default)]
+    pub open_prs: i64,
+    pub last_commit_at: Option<String>,
+    pub last_commit_msg: Option<String>,
     pub favorite: bool,
     pub source: String,
     pub github_id: Option<i64>,
@@ -86,7 +94,9 @@ pub struct ProjectFilter {
     pub kind: Option<String>,
     pub tag: Option<String>,
     pub favorite_only: Option<bool>,
-    pub sort: Option<String>, // updated | created | title | stars
+    pub archived_only: Option<bool>,
+    pub include_archived: Option<bool>,
+    pub sort: Option<String>, // updated | created | title | stars | activity
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -96,7 +106,7 @@ pub struct Achievement {
     pub title: String,
     pub description: String,
     pub icon: String,
-    pub kind: String,
+    pub kind: String, // auto | custom | manual | metric | milestone
     pub metric: Option<String>,
     pub target: i64,
     pub unlocked: bool,
@@ -111,10 +121,20 @@ pub struct CustomAchievementInput {
     pub description: String,
     #[serde(default = "default_icon")]
     pub icon: String,
+    /// Тип кастомного достижения: manual (ручная галка), metric (авто по метрике), milestone (веха)
+    #[serde(default = "default_ach_kind")]
+    pub kind: String,
+    /// Метрика для metric/milestone
+    pub metric: Option<String>,
+    /// Целевое значение для metric/milestone
+    pub target: Option<i64>,
 }
 
 fn default_icon() -> String {
     "target".to_string()
+}
+fn default_ach_kind() -> String {
+    "manual".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -127,4 +147,38 @@ pub struct Stats {
     pub github_imported: i64,
     pub achievements_unlocked: i64,
     pub achievements_total: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BlacklistEntry {
+    pub id: i64,
+    pub github_id: Option<i64>,
+    pub repo_url: String,
+    pub added_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpServer {
+    pub id: i64,
+    pub name: String,
+    pub url: String,
+    pub enabled: bool,
+    pub api_key: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpServerInput {
+    pub name: String,
+    pub url: String,
+    pub api_key: Option<String>,
+}
+
+/// PR / активность репозитория
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RepoActivity {
+    pub activity_score: i64,
+    pub open_prs: i64,
+    pub last_commit_at: Option<String>,
+    pub last_commit_msg: Option<String>,
 }

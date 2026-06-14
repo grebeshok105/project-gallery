@@ -7,9 +7,9 @@ export default {
       colors: {
         // near-black premium base (never pure #000)
         ink: {
-          DEFAULT: "#0a0b0e",
-          raised: "#101218",
-          sunken: "#070809",
+          DEFAULT: "rgb(var(--ink-rgb) / <alpha-value>)",
+          raised: "rgb(var(--ink-raised-rgb) / <alpha-value>)",
+          sunken: "rgb(var(--ink-sunken-rgb) / <alpha-value>)",
         },
         fg: {
           DEFAULT: "#f3f4f6",
@@ -18,9 +18,9 @@ export default {
           faint: "#454b57",
         },
         accent: {
-          DEFAULT: "#6ea8fe",
-          soft: "#9cc4ff",
-          deep: "#2f6bd6",
+          DEFAULT: "rgb(var(--accent-rgb) / <alpha-value>)",
+          soft: "rgb(var(--accent-soft-rgb) / <alpha-value>)",
+          deep: "rgb(var(--accent-deep-rgb) / <alpha-value>)",
         },
         ok: "#34d399",
         warn: "#f5b454",

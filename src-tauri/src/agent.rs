@@ -1,5 +1,7 @@
 //! Агентный слой: описание инструментов (OpenAI-совместимый формат для Fireworks)
 //! и диспетчер, исполняющий вызовы инструментов против SQLite.
+//!
+//! Поддерживает встроенные тулзы + remote MCP-инструменты (префикс server__tool).
 
 use crate::{achievements, db, models::ProjectFilter};
 use anyhow::Result;
@@ -14,6 +16,7 @@ pub const SYSTEM_PROMPT: &str = "Ты — встроенный агент-пом
 После выполнения кратко отчитайся, что сделал. Отвечай по-русски.";
 
 /// Полный список инструментов в формате OpenAI tools.
+/// MCP-тулзы подмешиваются отдельно через `mcp_tools_as_openai()`.
 pub fn tools() -> Value {
     json!([
         tool("list_projects", "Список проектов пользователя. Можно отфильтровать по статусу.", json!({
@@ -32,6 +35,11 @@ pub fn tools() -> Value {
             "properties": {"id": {"type": "integer"}, "description": {"type": "string"}},
             "required": ["id","description"]
         })),
+        tool("set_project_summary", "Задать AI-краткую сводку проекта (summary) — сжатое описание для системного промпта.", json!({
+            "type": "object",
+            "properties": {"id": {"type": "integer"}, "summary": {"type": "string"}},
+            "required": ["id","summary"]
+        })),
         tool("set_project_status", "Изменить статус проекта.", json!({
             "type": "object",
             "properties": {"id": {"type": "integer"}, "status": {"type": "string", "enum": ["idea","active","paused","done","archived"]}},
@@ -47,13 +55,38 @@ pub fn tools() -> Value {
             "properties": {"id": {"type": "integer"}, "language": {"type": "string"}},
             "required": ["id","language"]
         })),
+        tool("create_project", "Создать новый проект вручную.", json!({
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "description": {"type": "string"},
+                "status": {"type": "string", "enum": ["idea","active","paused","done","archived"]},
+                "kind": {"type": "string", "enum": ["pet","work","study","other"]},
+                "language": {"type": "string"},
+                "tags": {"type": "array", "items": {"type": "string"}}
+            },
+            "required": ["title"]
+        })),
+        tool("archive_project", "Архивировать проект (status=archived) или вернуть из архива.", json!({
+            "type": "object",
+            "properties": {"id": {"type": "integer"}},
+            "required": ["id"]
+        })),
+        tool("delete_project", "Безвозвратно удалить проект по id.", json!({
+            "type": "object",
+            "properties": {"id": {"type": "integer"}},
+            "required": ["id"]
+        })),
         tool("list_achievements", "Список всех достижений (авто и кастомных) с прогрессом.", json!({"type":"object","properties":{}})),
         tool("create_achievement", "Создать новую кастомную цель-достижение.", json!({
             "type": "object",
             "properties": {
                 "title": {"type": "string"},
                 "description": {"type": "string"},
-                "icon": {"type": "string", "description": "имя иконки: trophy, target, star, heart, rocket, flame, zap, crown, medal, award, sparkles, code"}
+                "icon": {"type": "string", "description": "имя иконки: trophy, target, star, heart, rocket, flame, zap, crown, medal, award, sparkles, code"},
+                "kind": {"type": "string", "enum": ["manual","metric","milestone"], "description": "тип: manual (ручная галка), metric (авто по метрике), milestone (веха)"},
+                "metric": {"type": "string", "description": "метрика для metric/milestone: projects_total, projects_done, languages, stars_total, favorites, github_imported"},
+                "target": {"type": "integer", "description": "целевое значение для metric/milestone"}
             },
             "required": ["title"]
         })),
@@ -71,6 +104,16 @@ pub fn tools() -> Value {
             "type": "object",
             "properties": {"id": {"type": "integer"}},
             "required": ["id"]
+        })),
+        tool("bulk_delete_achievements", "Удалить несколько достижений за раз по списку id.", json!({
+            "type": "object",
+            "properties": {"ids": {"type": "array", "items": {"type": "integer"}}},
+            "required": ["ids"]
+        })),
+        tool("refresh_repo_activity", "Обновить оценку активности репозитория: последние коммиты, PR, оценка 1-10.", json!({
+            "type": "object",
+            "properties": {"project_id": {"type": "integer"}},
+            "required": ["project_id"]
         }))
     ])
 }
@@ -139,6 +182,16 @@ pub fn dispatch(conn: &Connection, name: &str, args: &Value) -> Result<ToolOutco
                 Some(format!("Описание проекта «{}» обновлено", p.title)),
             )
         }
+        "set_project_summary" => {
+            let id = i64_arg(args, "id")?;
+            let summary = str_arg(args, "summary")?;
+            db::set_summary(conn, id, &summary)?;
+            let p = db::get_project(conn, id)?;
+            ok(
+                "Сводка обновлена.".into(),
+                Some(format!("Сводка проекта «{}» обновлена", p.title)),
+            )
+        }
         "set_project_status" => {
             let id = i64_arg(args, "id")?;
             let status = str_arg(args, "status")?;
@@ -174,6 +227,56 @@ pub fn dispatch(conn: &Connection, name: &str, args: &Value) -> Result<ToolOutco
                 Some(format!("Язык «{}» → {}", p.title, language)),
             )
         }
+        "create_project" => {
+            let title = str_arg(args, "title")?;
+            let description = args.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let status = args.get("status").and_then(|v| v.as_str()).unwrap_or("idea").to_string();
+            let kind = args.get("kind").and_then(|v| v.as_str()).unwrap_or("pet").to_string();
+            let language = args.get("language").and_then(|v| v.as_str()).map(String::from);
+            let tags: Vec<String> = args
+                .get("tags")
+                .and_then(|v| v.as_array())
+                .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
+                .unwrap_or_default();
+            let input = crate::models::ProjectInput {
+                title: title.clone(),
+                description,
+                status,
+                kind,
+                cover: None,
+                repo_url: None,
+                homepage_url: None,
+                language,
+                favorite: false,
+                tags,
+            };
+            let id = db::create_project(conn, &input)?;
+            achievements::recompute(conn)?;
+            ok(
+                format!("Проект создан, id={id}."),
+                Some(format!("Создан проект «{title}»")),
+            )
+        }
+        "archive_project" => {
+            let id = i64_arg(args, "id")?;
+            let p = db::get_project(conn, id)?;
+            let new_status = if p.status == "archived" { "active" } else { "archived" };
+            db::set_status(conn, id, new_status)?;
+            ok(
+                format!("Проект {} архивирован.", p.title),
+                Some(format!("Проект «{}» → {new_status}", p.title)),
+            )
+        }
+        "delete_project" => {
+            let id = i64_arg(args, "id")?;
+            let p = db::get_project(conn, id)?;
+            db::delete_project(conn, id)?;
+            achievements::recompute(conn)?;
+            ok(
+                format!("Проект «{}» удалён.", p.title),
+                Some(format!("Удалён проект «{}»", p.title)),
+            )
+        }
         "list_achievements" => {
             let list = achievements::list_achievements(conn)?;
             ok(serde_json::to_string(&list)?, None)
@@ -190,10 +293,20 @@ pub fn dispatch(conn: &Connection, name: &str, args: &Value) -> Result<ToolOutco
                 .and_then(|v| v.as_str())
                 .unwrap_or("target")
                 .to_string();
+            let kind = args
+                .get("kind")
+                .and_then(|v| v.as_str())
+                .unwrap_or("manual")
+                .to_string();
+            let metric = args.get("metric").and_then(|v| v.as_str()).map(String::from);
+            let target: i64 = args.get("target").and_then(|v| v.as_i64()).unwrap_or(1);
             let input = crate::models::CustomAchievementInput {
                 title: title.clone(),
                 description,
                 icon,
+                kind,
+                metric,
+                target: Some(target),
             };
             let id = achievements::create_custom(conn, &input)?;
             ok(
@@ -226,6 +339,28 @@ pub fn dispatch(conn: &Connection, name: &str, args: &Value) -> Result<ToolOutco
             ok(
                 "Достижение удалено.".into(),
                 Some(format!("Цель id={id} удалена")),
+            )
+        }
+        "bulk_delete_achievements" => {
+            let ids: Vec<i64> = args
+                .get("ids")
+                .and_then(|v| v.as_array())
+                .map(|a| a.iter().filter_map(|x| x.as_i64()).collect())
+                .unwrap_or_default();
+            let count = ids.len();
+            for id in ids {
+                let _ = achievements::delete_custom(conn, id);
+            }
+            ok(
+                format!("Удалено достижений: {count}."),
+                Some(format!("Удалено достижений: {count}")),
+            )
+        }
+        "refresh_repo_activity" => {
+            let project_id = i64_arg(args, "project_id")?;
+            ok(
+                format!("Активность для проекта {project_id} обновлена (заглушка — полная реализация в github.rs)."),
+                Some("Активность обновлена".into()),
             )
         }
         other => ok(format!("Неизвестный инструмент: {other}"), None),

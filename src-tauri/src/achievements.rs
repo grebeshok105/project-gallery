@@ -139,9 +139,10 @@ pub fn list_achievements(conn: &Connection) -> Result<Vec<Achievement>> {
 /// Кастомная цель пользователя — простая ачивка, которую он отмечает вручную.
 pub fn create_custom(conn: &Connection, input: &CustomAchievementInput) -> Result<i64> {
     conn.execute(
-        "INSERT INTO achievements (title, description, icon, kind, target)
+        "INSERT INTO achievements (title, description, icon, kind, metric, target)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
          VALUES (?1, ?2, ?3, 'custom', 1)",
-        params![input.title, input.description, input.icon],
+        params![input.title, input.description, input.icon, input.kind, input.metric, input.target.unwrap_or(1)],
     )?;
     Ok(conn.last_insert_rowid())
 }
@@ -152,14 +153,14 @@ pub fn toggle_custom(conn: &Connection, id: i64) -> Result<()> {
          SET unlocked = 1 - unlocked,
              progress = 1 - unlocked,
              unlocked_at = CASE WHEN unlocked=0 THEN datetime('now') ELSE NULL END
-         WHERE id=?1 AND kind='custom'",
+          WHERE id=?1 AND kind IN ('custom','manual','metric','milestone')",
         [id],
     )?;
     Ok(())
 }
 
 pub fn delete_custom(conn: &Connection, id: i64) -> Result<()> {
-    conn.execute("DELETE FROM achievements WHERE id=?1 AND kind='custom'", [id])?;
+    conn.execute("DELETE FROM achievements WHERE id=?1 AND kind IN ('custom','manual','metric','milestone')", [id])?;
     Ok(())
 }
 
@@ -173,19 +174,19 @@ pub fn update_custom(
 ) -> Result<()> {
     if let Some(t) = title {
         conn.execute(
-            "UPDATE achievements SET title=?1 WHERE id=?2 AND kind='custom'",
+            "UPDATE achievements SET title=?1 WHERE id=?2 AND kind IN ('custom','manual','metric','milestone')",
             params![t, id],
         )?;
     }
     if let Some(d) = description {
         conn.execute(
-            "UPDATE achievements SET description=?1 WHERE id=?2 AND kind='custom'",
+            "UPDATE achievements SET description=?1 WHERE id=?2 AND kind IN ('custom','manual','metric','milestone')",
             params![d, id],
         )?;
     }
     if let Some(ic) = icon {
         conn.execute(
-            "UPDATE achievements SET icon=?1 WHERE id=?2 AND kind='custom'",
+            "UPDATE achievements SET icon=?1 WHERE id=?2 AND kind IN ('custom','manual','metric','milestone')",
             params![ic, id],
         )?;
     }

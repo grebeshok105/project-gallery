@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import {
+  Plus, MagnifyingGlass, Heart, DownloadSimple, CircleNotch, Sparkle, Archive,
+} from "@phosphor-icons/react";
   Plus, MagnifyingGlass, Heart, DownloadSimple, CircleNotch, Sparkle,
 } from "@phosphor-icons/react";
 import { useStore } from "@/lib/store";
@@ -114,6 +116,7 @@ export function GalleryView() {
             <option value="created" className="bg-ink-raised">Новые</option>
             <option value="title" className="bg-ink-raised">По имени</option>
             <option value="stars" className="bg-ink-raised">По звёздам</option>
+            <option value="activity" className="bg-ink-raised">По активности</option>
           </select>
           <button
             className={`btn-icon ${filter.favorite_only ? "border-danger/40 text-danger" : ""}`}
@@ -121,6 +124,13 @@ export function GalleryView() {
             title="Только избранное"
           >
             <Heart weight={filter.favorite_only ? "fill" : "regular"} className="h-4 w-4" />
+          </button>
+          <button
+            className={`btn-icon ${filter.include_archived ? "border-accent/40 text-accent" : ""}`}
+            onClick={() => setFilter({ include_archived: !filter.include_archived })}
+            title="Показать архив"
+          >
+            <Archive weight={filter.include_archived ? "fill" : "regular"} className="h-4 w-4" />
           </button>
         </div>
       </div>

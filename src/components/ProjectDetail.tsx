@@ -2,6 +2,9 @@ import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   X, ArrowUpRight, GithubLogo, PencilSimple, Trash, Heart, Star,
+  Sparkle, Lightbulb, Tag, CircleNotch, ArrowsClockwise, GitPullRequest, Pulse,
+} from "@phosphor-icons/react";
+  X, ArrowUpRight, GithubLogo, PencilSimple, Trash, Heart, Star,
   Sparkle, Lightbulb, Tag, CircleNotch,
 } from "@phosphor-icons/react";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -22,14 +25,35 @@ interface Props {
 export function ProjectDetail({ project, onClose, onEdit }: Props) {
   const { refresh, config } = useStore();
   const [aiBusy, setAiBusy] = useState<string | null>(null);
+  const [actBusy, setActBusy] = useState(false);
   const [aiOut, setAiOut] = useState("");
 
   async function del() {
     if (!project) return;
     if (!confirm(`Удалить проект «${project.title}»?`)) return;
+    if (
+      project.source === "github" &&
+      project.repo_url &&
+      confirm("Добавить в чёрный список, чтобы не импортировать снова?")
+    ) {
+      await api.addToBlacklist(project.github_id, project.repo_url);
+    }
     await api.deleteProject(project.id);
     await refresh();
     onClose();
+  }
+
+  async function refreshActivity() {
+    if (!project) return;
+    setActBusy(true);
+    try {
+      await api.refreshRepoActivity(project.id);
+      await refresh();
+    } catch {
+      /* no-op */
+    } finally {
+      setActBusy(false);
+    }
   }
 
   async function ai(mode: "ideas" | "description" | "tags") {
@@ -128,6 +152,39 @@ export function ProjectDetail({ project, onClose, onEdit }: Props) {
                 />
                 {project.pushed_at && <Info label="Коммит" value={relativeDate(project.pushed_at)} />}
               </div>
+
+              {project.source === "github" && (
+                <div className="mt-6 panel p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm font-medium text-accent">
+                      <Pulse weight="duotone" className="h-4 w-4" /> Активность
+                    </div>
+                    <button className="btn-soft text-xs" onClick={refreshActivity} disabled={actBusy}>
+                      {actBusy ? <CircleNotch className="h-3.5 w-3.5 animate-spin" /> : <ArrowsClockwise className="h-3.5 w-3.5" />}
+                      Обновить
+                    </button>
+                  </div>
+                  <div className="mt-3 flex items-center gap-4 text-sm">
+                    <div className="flex items-center gap-2">
+                      <div className="h-1.5 w-24 overflow-hidden rounded-full bg-white/[0.06]">
+                        <div
+                          className="h-full rounded-full bg-accent transition-all duration-700 ease-spring"
+                          style={{ width: `${(project.activity_score / 10) * 100}%` }}
+                        />
+                      </div>
+                      <span className="font-mono text-xs text-fg-dim">{project.activity_score}/10</span>
+                    </div>
+                    <span className="flex items-center gap-1.5 text-xs text-fg-dim">
+                      <GitPullRequest weight="duotone" className="h-3.5 w-3.5" /> {project.open_prs} PR
+                    </span>
+                  </div>
+                  {project.last_commit_msg && (
+                    <div className="mt-2 truncate font-mono text-[11px] text-fg-faint">
+                      Посл. коммит: {project.last_commit_msg}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="mt-6 panel p-4">
                 <div className="flex items-center gap-2 text-sm font-medium text-accent">

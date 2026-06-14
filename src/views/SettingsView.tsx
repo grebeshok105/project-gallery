@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
-import { GithubLogo, Sparkle, Check, CircleNotch, FloppyDisk } from "@phosphor-icons/react";
+import { GithubLogo, Sparkle, Check, CircleNotch, FloppyDisk, Palette, SpeakerHigh, Plugs, Prohibit, Trash, Plus, ArrowsClockwise } from "@phosphor-icons/react";
 import { api } from "@/lib/api";
 import { useStore } from "@/lib/store";
+import type { McpServer, BlacklistEntry } from "@/lib/types";
+import { THEME_PRESETS, ACCENT_PRESETS, playSound, cn } from "@/lib/utils";
 
 export function SettingsView() {
   const { config, refreshConfig, pushToast } = useStore();
@@ -94,6 +96,10 @@ export function SettingsView() {
           </Field>
         </Card>
 
+        <AppearanceCard />
+        <McpCard />
+        <BlacklistCard />
+
         <div className="flex items-center gap-2 px-1 text-xs text-fg-faint">
           <Check weight="bold" className="h-3.5 w-3.5 text-ok" />
           Все данные хранятся локально на этом компьютере.
@@ -124,5 +130,180 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
       {children}
       {hint && <span className="mt-1.5 block text-xs text-fg-faint">{hint}</span>}
     </label>
+  );
+}
+
+function AppearanceCard() {
+  const { theme, accent, soundEnabled, setAppearance } = useStore();
+  return (
+    <Card title="Оформление" icon={<Palette weight="duotone" className="h-5 w-5" />}>
+      <Field label="Тема фона">
+        <div className="flex flex-wrap gap-2">
+          {THEME_PRESETS.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => void setAppearance({ theme: t.id })}
+              className={cn(
+                "rounded-2xl border px-3.5 py-2 text-xs transition-all duration-300 active:scale-95",
+                theme === t.id ? "border-accent/50 bg-accent/15 text-accent" : "border-white/[0.08] text-fg-faint hover:text-fg"
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </Field>
+      <Field label="Акцент">
+        <div className="flex flex-wrap gap-2.5">
+          {ACCENT_PRESETS.map((a) => (
+            <button
+              key={a.id}
+              onClick={() => void setAppearance({ accent: a.id })}
+              aria-label={a.label}
+              className={cn(
+                "h-9 w-9 rounded-full border-2 transition-transform duration-300 active:scale-90",
+                accent === a.id ? "border-fg" : "border-transparent"
+              )}
+              style={{ background: `rgb(${a.rgb})` }}
+            />
+          ))}
+        </div>
+      </Field>
+      <label className="flex items-center gap-2.5 text-sm text-fg-muted">
+        <input
+          type="checkbox"
+          checked={soundEnabled}
+          onChange={(e) => {
+            void setAppearance({ soundEnabled: e.target.checked });
+            if (e.target.checked) playSound("unlock");
+          }}
+          className="h-4 w-4 accent-accent"
+        />
+        <SpeakerHigh weight="duotone" className="h-4 w-4" />
+        Звуки и уведомления
+      </label>
+    </Card>
+  );
+}
+
+function McpCard() {
+  const { pushToast } = useStore();
+  const [servers, setServers] = useState<McpServer[]>([]);
+  const [name, setName] = useState("");
+  const [url, setUrl] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [busy, setBusy] = useState<number | null>(null);
+  const [tools, setTools] = useState<Record<number, string[]>>({});
+
+  async function load() {
+    setServers(await api.listMcpServers());
+  }
+  useEffect(() => {
+    void load();
+  }, []);
+
+  async function add() {
+    if (!name.trim() || !url.trim()) return;
+    await api.addMcpServer({ name: name.trim(), url: url.trim(), api_key: apiKey.trim() || null });
+    setName("");
+    setUrl("");
+    setApiKey("");
+    await load();
+  }
+
+  async function probe(id: number) {
+    setBusy(id);
+    try {
+      const list = await api.mcpListTools(id);
+      setTools((t) => ({ ...t, [id]: list.map((x) => x.name) }));
+      pushToast({ title: "MCP", description: `Найдено инструментов: ${list.length}`, icon: "plugs" });
+    } catch (err) {
+      pushToast({ title: "MCP ошибка", description: String(err).slice(0, 80), icon: "x" });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <Card title="MCP-серверы" icon={<Plugs weight="duotone" className="h-5 w-5" />}>
+      <p className="text-sm leading-relaxed text-fg-dim">
+        Внешние remote-MCP серверы расширяют агента (DeepWiki — без ключа, Context7 — с ключом).
+      </p>
+      <div className="space-y-2">
+        {servers.length === 0 && (
+          <div className="text-xs text-fg-faint">Пока нет серверов.</div>
+        )}
+        {servers.map((s) => (
+          <div key={s.id} className="rounded-2xl border border-white/[0.08] bg-ink-sunken p-3">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => api.toggleMcpServer(s.id).then(load)}
+                className={cn(
+                  "h-2.5 w-2.5 shrink-0 rounded-full",
+                  s.enabled ? "bg-ok" : "bg-fg-faint"
+                )}
+                aria-label="вкл/выкл"
+              />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium text-fg">{s.name}</div>
+                <div className="truncate font-mono text-[11px] text-fg-faint">{s.url}</div>
+              </div>
+              <button className="btn-soft px-3 py-1.5 text-xs" onClick={() => probe(s.id)} disabled={busy === s.id}>
+                {busy === s.id ? <CircleNotch className="h-3.5 w-3.5 animate-spin" /> : "tools/list"}
+              </button>
+              <button className="text-fg-faint hover:text-danger" onClick={() => api.removeMcpServer(s.id).then(load)}>
+                <Trash className="h-4 w-4" />
+              </button>
+            </div>
+            {tools[s.id] && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {tools[s.id].map((t) => (
+                  <span key={t} className="chip">{t}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="space-y-2 border-t border-white/[0.05] pt-3">
+        <input className="input" placeholder="Название (напр. Context7)" value={name} onChange={(e) => setName(e.target.value)} />
+        <input className="input" placeholder="https://mcp.context7.com/mcp" value={url} onChange={(e) => setUrl(e.target.value)} />
+        <input className="input" type="password" placeholder="API-ключ (необязательно)" value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
+        <button className="btn-soft w-full" onClick={add} disabled={!name.trim() || !url.trim()}>
+          <Plus className="h-4 w-4" /> Добавить сервер
+        </button>
+      </div>
+    </Card>
+  );
+}
+
+function BlacklistCard() {
+  const [items, setItems] = useState<BlacklistEntry[]>([]);
+  async function load() {
+    setItems(await api.listBlacklist());
+  }
+  useEffect(() => {
+    void load();
+  }, []);
+  return (
+    <Card title="Чёрный список репо" icon={<Prohibit weight="duotone" className="h-5 w-5" />}>
+      <p className="text-sm leading-relaxed text-fg-dim">
+        Репозитории из списка пропускаются при импорте из GitHub.
+      </p>
+      {items.length === 0 ? (
+        <div className="text-xs text-fg-faint">Список пуст.</div>
+      ) : (
+        <div className="space-y-1.5">
+          {items.map((b) => (
+            <div key={b.id} className="flex items-center gap-2 rounded-xl border border-white/[0.06] bg-ink-sunken px-3 py-2">
+              <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-fg-dim">{b.repo_url}</span>
+              <button className="text-fg-faint hover:text-accent" onClick={() => api.removeFromBlacklist(b.id).then(load)}>
+                <ArrowsClockwise className="h-4 w-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
   );
 }

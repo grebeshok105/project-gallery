@@ -52,8 +52,6 @@
     --accent-soft-rgb: 253 164 175;
     --accent-deep-rgb: 214 64 92;
   }
-    color-scheme: dark;
-  }
   html,
   body,
   #root {

@@ -1,0 +1,46 @@
+name: Build Windows installer
+
+# Сборка запускается при пуше тега вида v0.1.0, либо вручную из вкладки Actions.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend deps
+        run: npm install
+
+      - name: Generate icons
+        run: npm run tauri icon src-tauri/icons/app-icon.svg
+
+      - name: Build + publish release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Project Gallery ${{ github.ref_name }}"
+          releaseBody: "Автосборка Windows-инсталлятора (.exe / .msi)."
+          releaseDraft: false
+          prerelease: false

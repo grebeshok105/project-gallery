@@ -46,14 +46,16 @@ pub fn update_project(state: State<Db>, id: i64, input: ProjectInput) -> R<Proje
 pub fn delete_project(state: State<Db>, id: i64) -> R<()> {
     let conn = state.0.lock().map_err(e)?;
     db::delete_project(&conn, id).map_err(e)?;
-    achievements::recompute(&conn).map_err(e)
+    achievements::recompute(&conn).map_err(e)?;
+    Ok(())
 }
 
 #[tauri::command]
 pub fn toggle_favorite(state: State<Db>, id: i64) -> R<()> {
     let conn = state.0.lock().map_err(e)?;
     db::toggle_favorite(&conn, id).map_err(e)?;
-    achievements::recompute(&conn).map_err(e)
+    achievements::recompute(&conn).map_err(e)?;
+    Ok(())
 }
 
 #[tauri::command]

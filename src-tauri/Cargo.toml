@@ -25,10 +25,12 @@ keyring = { version = "3", features = ["windows-native"] }
 thiserror = "2"
 anyhow = "1"
 
-# Форсируем единые версии аллокаторных крейтов, иначе транзитивный `brotli`
-# не компилируется (E0277 в макросе implement_allocator).
-alloc-no-stdlib = "2.0.4"
-alloc-stdlib = "0.2.2"
+# Форсируем ТОЧНЫЕ версии аллокаторных крейтов. Без этого cargo тянет
+# alloc-stdlib 0.2.3, который разрешает alloc-no-stdlib до 3.0.0, а `brotli`
+# хочет 2.x — две версии в дереве дают E0277 в implement_allocator.
+# Точный `=0.2.2` выбрасывает сломанный 0.2.3 из графа.
+alloc-no-stdlib = "=2.0.4"
+alloc-stdlib = "=0.2.2"
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]

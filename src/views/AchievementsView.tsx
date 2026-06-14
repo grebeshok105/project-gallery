@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
-import { Plus, Trash2, Check } from "lucide-react";
+import { Plus, Trash, Check, X } from "@phosphor-icons/react";
 import { useStore } from "@/lib/store";
 import { api } from "@/lib/api";
 import type { Achievement } from "@/lib/types";
 import { Icon, ICON_CHOICES } from "@/components/Icon";
+import { Reveal } from "@/components/Reveal";
 import { cn } from "@/lib/utils";
 
 export function AchievementsView() {
@@ -21,27 +21,38 @@ export function AchievementsView() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-3 border-b border-line p-4">
-        <h1 className="text-xl font-bold text-slate-100">Достижения</h1>
-        <span className="text-sm text-slate-500">
-          {unlocked}/{achievements.length} разблокировано
-        </span>
-        <button className="btn-primary ml-auto" onClick={() => setAdding(true)}>
-          <Plus className="h-4 w-4" /> Своя цель
+      <div className="flex items-end justify-between gap-4 px-8 pt-8">
+        <div>
+          <div className="eyebrow mb-3">прогресс</div>
+          <h1 className="text-3xl font-semibold tracking-tight text-fg">Достижения</h1>
+          <p className="mt-1.5 text-sm text-fg-dim">
+            <span className="font-mono text-fg">{unlocked}</span> из{" "}
+            <span className="font-mono">{achievements.length}</span> разблокировано
+          </p>
+        </div>
+        <button className="btn-primary group" onClick={() => setAdding(true)}>
+          Своя цель
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-ink/10 transition-transform duration-500 ease-spring group-hover:translate-x-0.5">
+            <Plus weight="bold" className="h-3.5 w-3.5" />
+          </span>
         </button>
       </div>
 
-      <div className="flex-1 space-y-6 overflow-y-auto p-4">
+      <div className="flex-1 space-y-8 overflow-y-auto px-8 pb-10 pt-6">
         {custom.length > 0 && (
-          <Section title="Личные цели">
-            {custom.map((a) => (
-              <CustomCard key={a.id} a={a} onChange={refreshAchievements} />
+          <Section title="личные цели">
+            {custom.map((a, i) => (
+              <Reveal key={a.id} delay={i * 0.04}>
+                <CustomCard a={a} onChange={refreshAchievements} />
+              </Reveal>
             ))}
           </Section>
         )}
-        <Section title="Авто-достижения">
-          {auto.map((a) => (
-            <AutoCard key={a.id} a={a} />
+        <Section title="авто-достижения">
+          {auto.map((a, i) => (
+            <Reveal key={a.id} delay={i * 0.03}>
+              <AutoCard a={a} />
+            </Reveal>
           ))}
         </Section>
       </div>
@@ -59,21 +70,13 @@ export function AchievementsView() {
   );
 }
 
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
+      <h2 className="mb-4 font-mono text-[11px] uppercase tracking-[0.2em] text-fg-faint">
         {title}
       </h2>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {children}
-      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">{children}</div>
     </div>
   );
 }
@@ -81,103 +84,66 @@ function Section({
 function AutoCard({ a }: { a: Achievement }) {
   const pct = Math.min(100, Math.round((a.progress / a.target) * 100));
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      className={cn(
-        "card relative overflow-hidden p-4",
-        a.unlocked ? "border-accent/40 shadow-glow" : "opacity-90"
-      )}
-    >
-      <div className="flex items-start gap-3">
-        <div
-          className={cn(
-            "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl",
-            a.unlocked
-              ? "bg-accent/20 text-accent-soft"
-              : "bg-bg-soft text-slate-600"
-          )}
-        >
-          <Icon name={a.icon} className="h-6 w-6" />
-        </div>
-        <div className="min-w-0">
-          <div className="font-semibold text-slate-100">{a.title}</div>
-          <div className="text-xs text-slate-500">{a.description}</div>
-        </div>
-      </div>
-      <div className="mt-3">
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-bg-soft">
+    <div className={cn("bezel transition-opacity duration-500", !a.unlocked && "opacity-70")}>
+      <div className="bezel-core space-y-4 p-5">
+        <div className="flex items-start gap-3.5">
           <div
             className={cn(
-              "h-full rounded-full transition-all",
-              a.unlocked ? "bg-ok" : "bg-accent"
+              "flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl",
+              a.unlocked ? "bg-gold/15 text-gold" : "bg-white/[0.03] text-fg-faint"
             )}
-            style={{ width: `${pct}%` }}
-          />
+          >
+            <Icon name={a.icon} weight={a.unlocked ? "fill" : "duotone"} className="h-6 w-6" />
+          </div>
+          <div className="min-w-0 pt-0.5">
+            <div className="font-medium text-fg">{a.title}</div>
+            <div className="text-[13px] leading-snug text-fg-dim">{a.description}</div>
+          </div>
         </div>
-        <div className="mt-1 text-right text-xs text-slate-500">
-          {a.progress}/{a.target}
+        <div>
+          <div className="h-1 w-full overflow-hidden rounded-full bg-white/[0.05]">
+            <div
+              className={cn("h-full rounded-full transition-all duration-700 ease-spring", a.unlocked ? "bg-gold" : "bg-accent")}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <div className="mt-1.5 text-right font-mono text-[11px] text-fg-faint">
+            {a.progress}/{a.target}
+          </div>
         </div>
       </div>
-    </motion.div>
-  );
-}
-
-function CustomCard({
-  a,
-  onChange,
-}: {
-  a: Achievement;
-  onChange: () => void;
-}) {
-  return (
-    <div
-      className={cn(
-        "card flex items-center gap-3 p-4",
-        a.unlocked && "border-ok/40"
-      )}
-    >
-      <button
-        onClick={() => api.toggleCustomAchievement(a.id).then(onChange)}
-        className={cn(
-          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition",
-          a.unlocked
-            ? "border-ok bg-ok/20 text-ok"
-            : "border-line text-slate-600 hover:border-accent"
-        )}
-      >
-        {a.unlocked && <Check className="h-5 w-5" />}
-      </button>
-      <div className="min-w-0 flex-1">
-        <div
-          className={cn(
-            "font-medium text-slate-100",
-            a.unlocked && "line-through opacity-70"
-          )}
-        >
-          {a.title}
-        </div>
-        {a.description && (
-          <div className="text-xs text-slate-500">{a.description}</div>
-        )}
-      </div>
-      <button
-        className="text-slate-600 hover:text-danger"
-        onClick={() => api.deleteCustomAchievement(a.id).then(onChange)}
-      >
-        <Trash2 className="h-4 w-4" />
-      </button>
     </div>
   );
 }
 
-function AddCustom({
-  onClose,
-  onSaved,
-}: {
-  onClose: () => void;
-  onSaved: () => void;
-}) {
+function CustomCard({ a, onChange }: { a: Achievement; onChange: () => void }) {
+  return (
+    <div className={cn("bezel", a.unlocked && "ring-1 ring-ok/30")}>
+      <div className="bezel-core flex items-center gap-3.5 p-5">
+        <button
+          onClick={() => api.toggleCustomAchievement(a.id).then(onChange)}
+          className={cn(
+            "flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border transition-all duration-300 ease-spring active:scale-95",
+            a.unlocked ? "border-ok/40 bg-ok/15 text-ok" : "border-white/[0.08] text-fg-faint hover:border-accent/50"
+          )}
+        >
+          {a.unlocked && <Check weight="bold" className="h-5 w-5" />}
+        </button>
+        <div className="min-w-0 flex-1">
+          <div className={cn("font-medium text-fg", a.unlocked && "text-fg-dim line-through")}>
+            {a.title}
+          </div>
+          {a.description && <div className="text-[13px] text-fg-dim">{a.description}</div>}
+        </div>
+        <button className="text-fg-faint transition-colors hover:text-danger" onClick={() => api.deleteCustomAchievement(a.id).then(onChange)}>
+          <Trash className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AddCustom({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [icon, setIcon] = useState("target");
@@ -189,53 +155,41 @@ function AddCustom({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div className="card w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
-        <h2 className="mb-4 text-lg font-semibold">Новая личная цель</h2>
-        <div className="space-y-3">
-          <input
-            className="input"
-            placeholder="Например: Зарелизить мод v5.0"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            autoFocus
-          />
-          <input
-            className="input"
-            placeholder="Описание (необязательно)"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-          <div>
-            <div className="mb-2 text-xs text-slate-400">Иконка</div>
-            <div className="flex flex-wrap gap-2">
-              {ICON_CHOICES.map((name) => (
-                <button
-                  key={name}
-                  onClick={() => setIcon(name)}
-                  className={cn(
-                    "flex h-9 w-9 items-center justify-center rounded-lg border",
-                    icon === name
-                      ? "border-accent bg-accent/20 text-accent-soft"
-                      : "border-line text-slate-500 hover:text-slate-300"
-                  )}
-                >
-                  <Icon name={name} className="h-4 w-4" />
-                </button>
-              ))}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink-sunken/70 p-6 backdrop-blur-xl" onClick={onClose}>
+      <div className="bezel w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+        <div className="bezel-core p-6">
+          <div className="mb-5 flex items-center justify-between">
+            <div>
+              <div className="eyebrow mb-2">новая цель</div>
+              <h2 className="text-lg font-semibold text-fg">Личная цель</h2>
+            </div>
+            <button className="btn-icon" onClick={onClose}><X className="h-4 w-4" /></button>
+          </div>
+          <div className="space-y-3">
+            <input className="input" placeholder="Например: зарелизить мод v5.0" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
+            <input className="input" placeholder="Описание (необязательно)" value={description} onChange={(e) => setDescription(e.target.value)} />
+            <div>
+              <div className="mb-2 text-xs text-fg-dim">Иконка</div>
+              <div className="flex flex-wrap gap-2">
+                {ICON_CHOICES.map((name) => (
+                  <button
+                    key={name}
+                    onClick={() => setIcon(name)}
+                    className={cn(
+                      "flex h-10 w-10 items-center justify-center rounded-2xl border transition-all duration-300 active:scale-95",
+                      icon === name ? "border-accent/50 bg-accent/15 text-accent" : "border-white/[0.08] text-fg-faint hover:text-fg"
+                    )}
+                  >
+                    <Icon name={name} weight="duotone" className="h-4 w-4" />
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-        <div className="mt-5 flex justify-end gap-2">
-          <button className="btn-ghost" onClick={onClose}>
-            Отмена
-          </button>
-          <button className="btn-primary" onClick={save} disabled={!title.trim()}>
-            Добавить
-          </button>
+          <div className="mt-6 flex justify-end gap-2">
+            <button className="btn-soft" onClick={onClose}>Отмена</button>
+            <button className="btn-primary" onClick={save} disabled={!title.trim()}>Добавить</button>
+          </div>
         </div>
       </div>
     </div>

@@ -1,38 +1,40 @@
 import {
-  Sparkles, Layers, Library, CheckCircle, Trophy, Code, Binary, Star,
-  Heart, Github, Target, Award, Rocket, Flame, Zap, Crown, Medal,
-  type LucideIcon,
-} from "lucide-react";
+  Sparkle, StackSimple, Books, CheckCircle, Trophy, Code, Cpu,
+  Star, Heart, GithubLogo, Target, Medal, Crown, Lightning, Flame, Rocket,
+  type Icon as PhosphorIcon, type IconWeight,
+} from "@phosphor-icons/react";
 
-const MAP: Record<string, LucideIcon> = {
-  sparkles: Sparkles,
-  layers: Layers,
-  library: Library,
+const MAP: Record<string, PhosphorIcon> = {
+  sparkles: Sparkle,
+  layers: StackSimple,
+  library: Books,
   "check-circle": CheckCircle,
   trophy: Trophy,
   code: Code,
-  binary: Binary,
+  binary: Cpu,
   star: Star,
   heart: Heart,
-  github: Github,
+  github: GithubLogo,
   target: Target,
-  award: Award,
-  rocket: Rocket,
-  flame: Flame,
-  zap: Zap,
-  crown: Crown,
+  award: Medal,
   medal: Medal,
+  crown: Crown,
+  zap: Lightning,
+  flame: Flame,
+  rocket: Rocket,
 };
 
 export function Icon({
   name,
   className,
+  weight = "duotone",
 }: {
   name: string;
   className?: string;
+  weight?: IconWeight;
 }) {
   const Cmp = MAP[name] ?? Trophy;
-  return <Cmp className={className} />;
+  return <Cmp className={className} weight={weight} />;
 }
 
 export const ICON_CHOICES = Object.keys(MAP);

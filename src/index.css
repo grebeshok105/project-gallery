@@ -12,60 +12,104 @@
     height: 100%;
   }
   body {
-    @apply bg-bg text-slate-200 font-sans antialiased;
+    @apply bg-ink text-fg font-sans antialiased;
     margin: 0;
     overflow: hidden;
     user-select: none;
+    -webkit-font-smoothing: antialiased;
+    letter-spacing: -0.011em;
   }
   input,
   textarea {
     user-select: text;
   }
   ::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
+    width: 9px;
+    height: 9px;
   }
   ::-webkit-scrollbar-thumb {
-    @apply bg-line rounded-full;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-accent-dim;
+    background: rgba(255, 255, 255, 0.16);
   }
 }
 
 @layer components {
-  .card {
-    @apply bg-bg-card border border-line rounded-2xl;
+  /* Double-bezel: outer machined shell + inner core */
+  .bezel {
+    @apply rounded-bezel border border-white/[0.06] bg-white/[0.02] p-1.5;
   }
+  .bezel-core {
+    @apply rounded-core bg-ink-raised shadow-inner-hi;
+  }
+  .panel {
+    @apply rounded-core border border-white/[0.06] bg-ink-raised shadow-soft;
+  }
+
+  .hairline {
+    @apply border-white/[0.06];
+  }
+
+  /* Pill primary button, white-on-dark (Linear/Vercel premium move) */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2
-      text-sm font-medium transition-colors disabled:opacity-50
-      disabled:pointer-events-none;
+    @apply inline-flex select-none items-center justify-center gap-2 rounded-full
+      px-5 py-2.5 text-sm font-medium transition-all duration-500 ease-spring
+      active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40;
   }
   .btn-primary {
-    @apply btn bg-accent hover:bg-accent-soft text-white shadow-glow;
+    @apply btn bg-fg text-ink hover:bg-white;
   }
-  .btn-ghost {
-    @apply btn bg-bg-soft hover:bg-bg-hover border border-line text-slate-300;
+  .btn-soft {
+    @apply btn border border-white/[0.08] bg-white/[0.03] text-fg-muted
+      hover:bg-white/[0.07] hover:text-fg;
   }
   .btn-danger {
-    @apply btn bg-danger/15 hover:bg-danger/25 text-danger border border-danger/30;
+    @apply btn border border-danger/30 bg-danger/10 text-danger hover:bg-danger/20;
   }
+  .btn-icon {
+    @apply inline-flex h-10 w-10 items-center justify-center rounded-full
+      border border-white/[0.08] bg-white/[0.03] text-fg-muted
+      transition-all duration-500 ease-spring hover:bg-white/[0.07] hover:text-fg
+      active:scale-[0.96];
+  }
+
   .input {
-    @apply w-full rounded-xl bg-bg-soft border border-line px-3 py-2 text-sm
-      text-slate-200 placeholder:text-slate-500 outline-none
-      focus:border-accent focus:ring-2 focus:ring-accent/30;
+    @apply w-full rounded-2xl border border-white/[0.08] bg-ink-sunken px-3.5 py-2.5
+      text-sm text-fg placeholder:text-fg-faint outline-none transition-colors
+      duration-300 focus:border-accent/50 focus:ring-4 focus:ring-accent/10;
   }
+
+  /* Eyebrow tag */
+  .eyebrow {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-white/[0.08]
+      bg-white/[0.03] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.2em]
+      text-fg-dim;
+  }
+
   .chip {
-    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs
-      font-medium border border-line bg-bg-soft text-slate-400;
+    @apply inline-flex items-center gap-1 rounded-full border border-white/[0.07]
+      bg-white/[0.03] px-2.5 py-1 text-xs font-medium text-fg-muted;
   }
+
   .nav-item {
-    @apply flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium
-      text-slate-400 hover:text-slate-100 hover:bg-bg-hover transition-colors
-      cursor-pointer;
+    @apply group flex items-center gap-3 rounded-2xl px-3.5 py-3 text-sm font-medium
+      text-fg-dim transition-all duration-300 ease-spring hover:text-fg
+      hover:bg-white/[0.04] cursor-pointer;
   }
   .nav-item-active {
-    @apply text-white bg-accent/15 border border-accent/30;
+    @apply bg-white/[0.06] text-fg shadow-inner-hi;
   }
+}
+
+/* fixed grain overlay (premium paper feel), pointer-events none */
+.grain::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }

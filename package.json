@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Личная галерея проектов с достижениями и LLM-ассистентом (Tauri 2 + React)",
+  "description": "Личная галерея проектов с достижениями и LLM-агентом (Tauri 2 + React)",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
@@ -13,11 +13,13 @@
     "tauri:build": "tauri build"
   },
   "dependencies": {
+    "@fontsource-variable/jetbrains-mono": "^5.1.1",
+    "@fontsource-variable/plus-jakarta-sans": "^5.1.0",
+    "@phosphor-icons/react": "^2.1.7",
     "@tauri-apps/api": "^2.1.1",
     "@tauri-apps/plugin-opener": "^2.2.5",
     "clsx": "^2.1.1",
     "framer-motion": "^11.11.17",
-    "lucide-react": "^0.460.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tailwind-merge": "^2.5.4",

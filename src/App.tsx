@@ -8,6 +8,8 @@ import { AssistantView } from "./views/AssistantView";
 import { SettingsView } from "./views/SettingsView";
 import { useStore } from "./lib/store";
 
+const SPRING = [0.32, 0.72, 0, 1] as const;
+
 export default function App() {
   const [tab, setTab] = useState<Tab>("gallery");
   const { refresh, refreshConfig } = useStore();
@@ -18,16 +20,24 @@ export default function App() {
   }, [refresh, refreshConfig]);
 
   return (
-    <div className="flex h-[100dvh] w-screen overflow-hidden bg-bg text-slate-200">
+    <div className="grain relative flex h-[100dvh] w-screen overflow-hidden bg-ink text-fg">
+      {/* ambient mesh glow, fixed, pointer-events none */}
+      <div
+        className="pointer-events-none fixed inset-0 z-0"
+        style={{
+          background:
+            "radial-gradient(60rem 40rem at 80% -10%, rgba(110,168,254,0.08), transparent 60%), radial-gradient(50rem 40rem at -10% 110%, rgba(52,211,153,0.05), transparent 55%)",
+        }}
+      />
       <Sidebar tab={tab} setTab={setTab} />
-      <main className="flex-1 overflow-hidden">
+      <main className="relative z-10 flex-1 overflow-hidden">
         <AnimatePresence mode="wait">
           <motion.div
             key={tab}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.18 }}
+            initial={{ opacity: 0, y: 10, filter: "blur(4px)" }}
+            animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+            exit={{ opacity: 0, y: -6, filter: "blur(2px)" }}
+            transition={{ duration: 0.4, ease: SPRING }}
             className="h-full"
           >
             {tab === "gallery" && <GalleryView />}

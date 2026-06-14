@@ -16,17 +16,6 @@ import type {
   Stats,
   StoredChatMessage,
 } from "./types";
-  Achievement,
-  AppConfig,
-  ChatMessage,
-  ChatSession,
-  Project,
-  ProjectFilter,
-  ProjectInput,
-  RepoHit,
-  Stats,
-  StoredChatMessage,
-} from "./types";
 
 export const api = {
   // projects

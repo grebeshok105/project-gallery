@@ -141,7 +141,6 @@ pub fn create_custom(conn: &Connection, input: &CustomAchievementInput) -> Resul
     conn.execute(
         "INSERT INTO achievements (title, description, icon, kind, metric, target)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-         VALUES (?1, ?2, ?3, 'custom', 1)",
         params![input.title, input.description, input.icon, input.kind, input.metric, input.target.unwrap_or(1)],
     )?;
     Ok(conn.last_insert_rowid())

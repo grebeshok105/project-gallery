@@ -4,9 +4,6 @@ import {
   X, ArrowUpRight, GithubLogo, PencilSimple, Trash, Heart, Star,
   Sparkle, Lightbulb, Tag, CircleNotch, ArrowsClockwise, GitPullRequest, Pulse,
 } from "@phosphor-icons/react";
-  X, ArrowUpRight, GithubLogo, PencilSimple, Trash, Heart, Star,
-  Sparkle, Lightbulb, Tag, CircleNotch,
-} from "@phosphor-icons/react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { api } from "@/lib/api";
 import { KIND_LABELS, type Project } from "@/lib/types";

@@ -83,8 +83,8 @@ pub struct ToolOutcome {
     pub action: Option<String>,
 }
 
-fn ok(result: String, action: Option<String>) -> ToolOutcome {
-    ToolOutcome { result, action }
+fn ok(result: String, action: Option<String>) -> Result<ToolOutcome> {
+    Ok(ToolOutcome { result, action })
 }
 
 fn i64_arg(args: &Value, key: &str) -> Result<i64> {

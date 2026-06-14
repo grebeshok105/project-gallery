@@ -1,0 +1,34 @@
+[package]
+name = "project-gallery"
+version = "0.1.0"
+description = "Личная галерея проектов"
+authors = ["grebeshok105"]
+edition = "2021"
+
+[lib]
+name = "project_gallery_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.32", features = ["bundled"] }
+chrono = { version = "0.4", features = ["serde"] }
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+tokio = { version = "1", features = ["full"] }
+keyring = { version = "3", features = ["windows-native"] }
+thiserror = "2"
+anyhow = "1"
+
+# Форсируем единые версии аллокаторных крейтов, иначе транзитивный `brotli`
+# не компилируется (E0277 в макросе implement_allocator).
+alloc-no-stdlib = "2.0.4"
+alloc-stdlib = "0.2.2"
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]

@@ -64,7 +64,19 @@ pub fn run() {
             commands::remove_mcp_server,
             commands::toggle_mcp_server,
             commands::mcp_list_tools,
-            commands::find_similar,
+            commands::list_devlog,
+            commands::add_devlog,
+            commands::delete_devlog,
+            commands::get_score,
+            commands::set_score,
+            commands::score_history,
+            commands::list_collections,
+            commands::create_collection,
+            commands::delete_collection,
+            commands::set_collection_item,
+            commands::list_screenshots,
+            commands::add_screenshot,
+            commands::delete_screenshot,
         ])
         .run(tauri::generate_context!())
         .expect("ошибка запуска приложения Tauri");

@@ -724,8 +724,93 @@ pub async fn mcp_list_tools(state: State<'_, Db>, server_id: i64) -> R<Vec<crate
         let servers = db::list_mcp_servers(&conn).map_err(e)?;
         servers.into_iter().find(|s| s.id == server_id)
             .map(|s| (s.url, s.api_key))
-            .map(|s| s.url)
             .ok_or_else(|| "MCP-сервер не найден".to_string())?
     };
     crate::mcp::list_tools(&url, api_key.as_deref()).await.map_err(e)
+}
+
+// ──────────────────────── v4: devlog ───────────────────
+
+#[tauri::command]
+pub fn list_devlog(state: State<Db>, project_id: i64) -> R<Vec<DevlogEntry>> {
+    let conn = state.0.lock().map_err(e)?;
+    db::list_devlog(&conn, project_id).map_err(e)
+}
+
+#[tauri::command]
+pub fn add_devlog(state: State<Db>, project_id: i64, entry_date: Option<String>, body: String) -> R<i64> {
+    let conn = state.0.lock().map_err(e)?;
+    db::add_devlog(&conn, project_id, entry_date.as_deref(), &body).map_err(e)
+}
+
+#[tauri::command]
+pub fn delete_devlog(state: State<Db>, id: i64) -> R<()> {
+    let conn = state.0.lock().map_err(e)?;
+    db::delete_devlog(&conn, id).map_err(e)
+}
+
+// ──────────────────────── v4: scores ───────────────────
+
+#[tauri::command]
+pub fn get_score(state: State<Db>, project_id: i64) -> R<Option<ProjectScore>> {
+    let conn = state.0.lock().map_err(e)?;
+    db::get_score(&conn, project_id).map_err(e)
+}
+
+#[tauri::command]
+pub fn set_score(state: State<Db>, project_id: i64, input: ProjectScoreInput) -> R<()> {
+    let conn = state.0.lock().map_err(e)?;
+    db::set_score(&conn, project_id, &input).map_err(e)
+}
+
+#[tauri::command]
+pub fn score_history(state: State<Db>, project_id: i64) -> R<Vec<ScoreHistoryPoint>> {
+    let conn = state.0.lock().map_err(e)?;
+    db::score_history(&conn, project_id).map_err(e)
+}
+
+// ──────────────────────── v4: collections ───────────────────
+
+#[tauri::command]
+pub fn list_collections(state: State<Db>) -> R<Vec<Collection>> {
+    let conn = state.0.lock().map_err(e)?;
+    db::list_collections(&conn).map_err(e)
+}
+
+#[tauri::command]
+pub fn create_collection(state: State<Db>, name: String, icon: Option<String>) -> R<i64> {
+    let conn = state.0.lock().map_err(e)?;
+    db::create_collection(&conn, &name, &icon.unwrap_or_else(|| "folder".into())).map_err(e)
+}
+
+#[tauri::command]
+pub fn delete_collection(state: State<Db>, id: i64) -> R<()> {
+    let conn = state.0.lock().map_err(e)?;
+    db::delete_collection(&conn, id).map_err(e)
+}
+
+#[tauri::command]
+pub fn set_collection_item(state: State<Db>, collection_id: i64, project_id: i64, add: bool) -> R<()> {
+    let conn = state.0.lock().map_err(e)?;
+    db::set_collection_item(&conn, collection_id, project_id, add).map_err(e)
+}
+
+// ──────────────────────── v4: screenshots ───────────────────
+
+#[tauri::command]
+pub fn list_screenshots(state: State<Db>, project_id: i64) -> R<Vec<Screenshot>> {
+    let conn = state.0.lock().map_err(e)?;
+    db::list_screenshots(&conn, project_id).map_err(e)
+}
+
+#[tauri::command]
+pub fn add_screenshot(state: State<Db>, project_id: i64, path: String, caption: Option<String>) -> R<i64> {
+    let conn = state.0.lock().map_err(e)?;
+    db::add_screenshot(&conn, project_id, &path, &caption.unwrap_or_default()).map_err(e)
+}
+
+#[tauri::command]
+pub fn delete_screenshot(state: State<Db>, id: i64) -> R<()> {
+    let conn = state.0.lock().map_err(e)?;
+    db::delete_screenshot(&conn, id).map_err(e)
 }

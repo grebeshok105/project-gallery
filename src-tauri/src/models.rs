@@ -20,6 +20,8 @@ pub struct Project {
     pub open_prs: i64,
     pub last_commit_at: Option<String>,
     pub last_commit_msg: Option<String>,
+    #[serde(default)]
+    pub commit_count: i64,
     pub favorite: bool,
     pub source: String,
     pub github_id: Option<i64>,
@@ -181,4 +183,64 @@ pub struct RepoActivity {
     pub open_prs: i64,
     pub last_commit_at: Option<String>,
     pub last_commit_msg: Option<String>,
+}
+
+// ===================== v4: devlog / scores / collections / screenshots =====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DevlogEntry {
+    pub id: i64,
+    pub project_id: i64,
+    pub entry_date: String,
+    pub body: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectScore {
+    pub project_id: i64,
+    pub ui: i64,
+    pub code: i64,
+    pub idea: i64,
+    pub readiness: i64,
+    pub note: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScoreHistoryPoint {
+    pub ui: i64,
+    pub code: i64,
+    pub idea: i64,
+    pub readiness: i64,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProjectScoreInput {
+    pub ui: i64,
+    pub code: i64,
+    pub idea: i64,
+    pub readiness: i64,
+    #[serde(default)]
+    pub note: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Collection {
+    pub id: i64,
+    pub name: String,
+    pub icon: String,
+    pub created_at: String,
+    #[serde(default)]
+    pub project_ids: Vec<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Screenshot {
+    pub id: i64,
+    pub project_id: i64,
+    pub path: String,
+    pub caption: String,
+    pub created_at: String,
 }

@@ -10,6 +10,7 @@ pub struct Db(pub Mutex<Connection>);
 const MIGRATION_V1: &str = include_str!("../migrations/0001_init.sql");
 const MIGRATION_V2: &str = include_str!("../migrations/0002_v2.sql");
 const MIGRATION_V3: &str = include_str!("../migrations/0003_v3.sql");
+const MIGRATION_V4: &str = include_str!("../migrations/0004_v4.sql");
 
 pub fn open(app_dir: PathBuf) -> Result<Connection> {
     std::fs::create_dir_all(&app_dir)?;
@@ -27,6 +28,10 @@ pub fn open(app_dir: PathBuf) -> Result<Connection> {
     if version < 3 {
         conn.execute_batch(MIGRATION_V3)?;
         conn.execute_batch("PRAGMA user_version = 3;")?;
+    }
+    if version < 4 {
+        conn.execute_batch(MIGRATION_V4)?;
+        conn.execute_batch("PRAGMA user_version = 4;")?;
     }
     Ok(conn)
 }
@@ -79,6 +84,7 @@ fn row_to_project(conn: &Connection, r: &rusqlite::Row) -> rusqlite::Result<Proj
         open_prs: r.get("open_prs").unwrap_or(0),
         last_commit_at: r.get("last_commit_at")?,
         last_commit_msg: r.get("last_commit_msg")?,
+        commit_count: r.get("commit_count").unwrap_or(0),
         favorite: r.get::<_, i64>("favorite")? != 0,
         source: r.get("source")?,
         github_id: r.get("github_id")?,
@@ -443,5 +449,189 @@ pub fn add_chat_message(
         "UPDATE chat_sessions SET updated_at=datetime('now') WHERE id=?1",
         [chat_id],
     )?;
+    Ok(())
+}
+
+// ──────────────────────── v4: devlog ───────────────────
+
+pub fn list_devlog(conn: &Connection, project_id: i64) -> Result<Vec<DevlogEntry>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, project_id, entry_date, body, created_at FROM devlog WHERE project_id=?1 ORDER BY entry_date DESC, id DESC",
+    )?;
+    let rows = stmt.query_map([project_id], |r| {
+        Ok(DevlogEntry {
+            id: r.get(0)?,
+            project_id: r.get(1)?,
+            entry_date: r.get(2)?,
+            body: r.get(3)?,
+            created_at: r.get(4)?,
+        })
+    })?;
+    Ok(rows.filter_map(|r| r.ok()).collect())
+}
+
+pub fn add_devlog(conn: &Connection, project_id: i64, entry_date: Option<&str>, body: &str) -> Result<i64> {
+    match entry_date {
+        Some(d) if !d.is_empty() => {
+            conn.execute(
+                "INSERT INTO devlog(project_id, entry_date, body) VALUES (?1,?2,?3)",
+                params![project_id, d, body],
+            )?;
+        }
+        _ => {
+            conn.execute(
+                "INSERT INTO devlog(project_id, body) VALUES (?1,?2)",
+                params![project_id, body],
+            )?;
+        }
+    }
+    Ok(conn.last_insert_rowid())
+}
+
+pub fn delete_devlog(conn: &Connection, id: i64) -> Result<()> {
+    conn.execute("DELETE FROM devlog WHERE id=?1", [id])?;
+    Ok(())
+}
+
+// ──────────────────────── v4: scores ───────────────────
+
+pub fn get_score(conn: &Connection, project_id: i64) -> Result<Option<ProjectScore>> {
+    let s = conn
+        .query_row(
+            "SELECT project_id, ui, code, idea, readiness, note, updated_at FROM project_scores WHERE project_id=?1",
+            [project_id],
+            |r| {
+                Ok(ProjectScore {
+                    project_id: r.get(0)?,
+                    ui: r.get(1)?,
+                    code: r.get(2)?,
+                    idea: r.get(3)?,
+                    readiness: r.get(4)?,
+                    note: r.get(5)?,
+                    updated_at: r.get(6)?,
+                })
+            },
+        )
+        .ok();
+    Ok(s)
+}
+
+pub fn set_score(conn: &Connection, project_id: i64, input: &ProjectScoreInput) -> Result<()> {
+    conn.execute(
+        "INSERT INTO project_scores(project_id, ui, code, idea, readiness, note, updated_at)
+         VALUES (?1,?2,?3,?4,?5,?6,datetime('now'))
+         ON CONFLICT(project_id) DO UPDATE SET
+            ui=excluded.ui, code=excluded.code, idea=excluded.idea,
+            readiness=excluded.readiness, note=excluded.note, updated_at=datetime('now')",
+        params![project_id, input.ui, input.code, input.idea, input.readiness, input.note],
+    )?;
+    conn.execute(
+        "INSERT INTO project_score_history(project_id, ui, code, idea, readiness)
+         VALUES (?1,?2,?3,?4,?5)",
+        params![project_id, input.ui, input.code, input.idea, input.readiness],
+    )?;
+    Ok(())
+}
+
+pub fn score_history(conn: &Connection, project_id: i64) -> Result<Vec<ScoreHistoryPoint>> {
+    let mut stmt = conn.prepare(
+        "SELECT ui, code, idea, readiness, created_at FROM project_score_history WHERE project_id=?1 ORDER BY id",
+    )?;
+    let rows = stmt.query_map([project_id], |r| {
+        Ok(ScoreHistoryPoint {
+            ui: r.get(0)?,
+            code: r.get(1)?,
+            idea: r.get(2)?,
+            readiness: r.get(3)?,
+            created_at: r.get(4)?,
+        })
+    })?;
+    Ok(rows.filter_map(|r| r.ok()).collect())
+}
+
+// ──────────────────────── v4: collections ───────────────────
+
+pub fn list_collections(conn: &Connection) -> Result<Vec<Collection>> {
+    let mut stmt = conn.prepare("SELECT id, name, icon, created_at FROM collections ORDER BY name")?;
+    let cols: Vec<Collection> = stmt
+        .query_map([], |r| {
+            Ok(Collection {
+                id: r.get(0)?,
+                name: r.get(1)?,
+                icon: r.get(2)?,
+                created_at: r.get(3)?,
+                project_ids: Vec::new(),
+            })
+        })?
+        .filter_map(|r| r.ok())
+        .collect();
+    let mut out = Vec::new();
+    for mut c in cols {
+        let mut ps = conn.prepare("SELECT project_id FROM collection_items WHERE collection_id=?1")?;
+        c.project_ids = ps
+            .query_map([c.id], |r| r.get::<_, i64>(0))?
+            .filter_map(|r| r.ok())
+            .collect();
+        out.push(c);
+    }
+    Ok(out)
+}
+
+pub fn create_collection(conn: &Connection, name: &str, icon: &str) -> Result<i64> {
+    conn.execute(
+        "INSERT INTO collections(name, icon) VALUES (?1, ?2)",
+        params![name, icon],
+    )?;
+    Ok(conn.last_insert_rowid())
+}
+
+pub fn delete_collection(conn: &Connection, id: i64) -> Result<()> {
+    conn.execute("DELETE FROM collections WHERE id=?1", [id])?;
+    Ok(())
+}
+
+pub fn set_collection_item(conn: &Connection, collection_id: i64, project_id: i64, add: bool) -> Result<()> {
+    if add {
+        conn.execute(
+            "INSERT OR IGNORE INTO collection_items(collection_id, project_id) VALUES (?1,?2)",
+            params![collection_id, project_id],
+        )?;
+    } else {
+        conn.execute(
+            "DELETE FROM collection_items WHERE collection_id=?1 AND project_id=?2",
+            params![collection_id, project_id],
+        )?;
+    }
+    Ok(())
+}
+
+// ──────────────────────── v4: screenshots ───────────────────
+
+pub fn list_screenshots(conn: &Connection, project_id: i64) -> Result<Vec<Screenshot>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, project_id, path, caption, created_at FROM screenshots WHERE project_id=?1 ORDER BY id",
+    )?;
+    let rows = stmt.query_map([project_id], |r| {
+        Ok(Screenshot {
+            id: r.get(0)?,
+            project_id: r.get(1)?,
+            path: r.get(2)?,
+            caption: r.get(3)?,
+            created_at: r.get(4)?,
+        })
+    })?;
+    Ok(rows.filter_map(|r| r.ok()).collect())
+}
+
+pub fn add_screenshot(conn: &Connection, project_id: i64, path: &str, caption: &str) -> Result<i64> {
+    conn.execute(
+        "INSERT INTO screenshots(project_id, path, caption) VALUES (?1,?2,?3)",
+        params![project_id, path, caption],
+    )?;
+    Ok(conn.last_insert_rowid())
+}
+
+pub fn delete_screenshot(conn: &Connection, id: i64) -> Result<()> {
+    conn.execute("DELETE FROM screenshots WHERE id=?1", [id])?;
     Ok(())
 }

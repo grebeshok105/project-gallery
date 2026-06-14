@@ -17,6 +17,7 @@ export interface Project {
   open_prs: number;
   last_commit_at: string | null;
   last_commit_msg: string | null;
+  commit_count: number;
   favorite: boolean;
   source: "manual" | "github";
   github_id: number | null;
@@ -169,3 +170,53 @@ export const KIND_LABELS: Record<ProjectKind, string> = {
   study: "Учёба",
   other: "Другое",
 };
+
+export interface DevlogEntry {
+  id: number;
+  project_id: number;
+  entry_date: string;
+  body: string;
+  created_at: string;
+}
+
+export interface ProjectScore {
+  project_id: number;
+  ui: number;
+  code: number;
+  idea: number;
+  readiness: number;
+  note: string;
+  updated_at: string;
+}
+
+export interface ScoreHistoryPoint {
+  ui: number;
+  code: number;
+  idea: number;
+  readiness: number;
+  created_at: string;
+}
+
+export interface ProjectScoreInput {
+  ui: number;
+  code: number;
+  idea: number;
+  readiness: number;
+  note: string;
+}
+
+export interface Collection {
+  id: number;
+  name: string;
+  icon: string;
+  created_at: string;
+  project_ids: number[];
+}
+
+export interface Screenshot {
+  id: number;
+  project_id: number;
+  path: string;
+  caption: string;
+  created_at: string;
+}

@@ -5,14 +5,20 @@ import type {
   BlacklistEntry,
   ChatMessage,
   ChatSession,
+  Collection,
   CustomAchievementInput,
+  DevlogEntry,
   McpServer,
   McpTool,
   Project,
   ProjectFilter,
   ProjectInput,
+  ProjectScore,
+  ProjectScoreInput,
   RepoActivity,
   RepoHit,
+  ScoreHistoryPoint,
+  Screenshot,
   Stats,
   StoredChatMessage,
 } from "./types";
@@ -98,4 +104,33 @@ export const api = {
   toggleMcpServer: (id: number) => invoke<boolean>("toggle_mcp_server", { id }),
   mcpListTools: (serverId: number) =>
     invoke<McpTool[]>("mcp_list_tools", { serverId }),
+
+  // devlog
+  listDevlog: (projectId: number) => invoke<DevlogEntry[]>("list_devlog", { projectId }),
+  addDevlog: (projectId: number, body: string, entryDate?: string) =>
+    invoke<number>("add_devlog", { projectId, body, entryDate: entryDate ?? null }),
+  deleteDevlog: (id: number) => invoke<void>("delete_devlog", { id }),
+
+  // scores
+  getScore: (projectId: number) => invoke<ProjectScore | null>("get_score", { projectId }),
+  setScore: (projectId: number, input: ProjectScoreInput) =>
+    invoke<void>("set_score", { projectId, input }),
+  scoreHistory: (projectId: number) =>
+    invoke<ScoreHistoryPoint[]>("score_history", { projectId }),
+
+  // collections
+  listCollections: () => invoke<Collection[]>("list_collections"),
+  createCollection: (name: string, icon?: string) =>
+    invoke<number>("create_collection", { name, icon: icon ?? null }),
+  deleteCollection: (id: number) => invoke<void>("delete_collection", { id }),
+  setCollectionItem: (collectionId: number, projectId: number, add: boolean) =>
+    invoke<void>("set_collection_item", { collectionId, projectId, add }),
+
+  // screenshots
+  listScreenshots: (projectId: number) =>
+    invoke<Screenshot[]>("list_screenshots", { projectId }),
+  addScreenshot: (projectId: number, path: string, caption?: string) =>
+    invoke<number>("add_screenshot", { projectId, path, caption: caption ?? null }),
+  deleteScreenshot: (id: number) => invoke<void>("delete_screenshot", { id }),
+};
 };

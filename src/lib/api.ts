@@ -53,4 +53,8 @@ export const api = {
     invoke<string>("llm_chat", { messages }),
   llmProjectIdeas: (projectId: number, mode: "ideas" | "description" | "tags") =>
     invoke<string>("llm_project_ideas", { projectId, mode }),
+  llmAgentChat: (messages: ChatMessage[]) =>
+    invoke<{ reply: string; actions: string[] }>("llm_agent_chat", { messages }),
+  llmAutodescribeMissing: () =>
+    invoke<number>("llm_autodescribe_missing"),
 };

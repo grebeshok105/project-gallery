@@ -82,3 +82,33 @@ pub async fn chat(cfg: &LlmConfig, messages: &[ChatMessage]) -> anyhow::Result<S
         .unwrap_or_default();
     Ok(answer)
 }
+
+/// Низкоуровневый вызов: отправляет произвольное JSON-тело в /chat/completions
+/// и возвращает разобранный JSON-ответ. Используется агентом для tool-calling.
+pub async fn raw_chat(
+    cfg: &LlmConfig,
+    body: serde_json::Value,
+) -> anyhow::Result<serde_json::Value> {
+    if cfg.model.trim().is_empty() {
+        anyhow::bail!("Не задана модель LLM. Укажи её в настройках.");
+    }
+    let base = cfg.base_url.trim_end_matches('/');
+    let url = format!("{base}/chat/completions");
+    let client = reqwest::Client::builder()
+        .user_agent("project-gallery")
+        .build()?;
+
+    let mut req = client.post(&url).json(&body);
+    if let Some(key) = &cfg.api_key {
+        if !key.is_empty() {
+            req = req.header("Authorization", format!("Bearer {key}"));
+        }
+    }
+    let resp = req.send().await?;
+    if !resp.status().is_success() {
+        let code = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        anyhow::bail!("LLM API {code}: {text}");
+    }
+    Ok(resp.json().await?)
+}

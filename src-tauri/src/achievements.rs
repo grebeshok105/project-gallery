@@ -162,3 +162,32 @@ pub fn delete_custom(conn: &Connection, id: i64) -> Result<()> {
     conn.execute("DELETE FROM achievements WHERE id=?1 AND kind='custom'", [id])?;
     Ok(())
 }
+
+/// Обновляет поля кастомного достижения (только переданные не None).
+pub fn update_custom(
+    conn: &Connection,
+    id: i64,
+    title: Option<&str>,
+    description: Option<&str>,
+    icon: Option<&str>,
+) -> Result<()> {
+    if let Some(t) = title {
+        conn.execute(
+            "UPDATE achievements SET title=?1 WHERE id=?2 AND kind='custom'",
+            params![t, id],
+        )?;
+    }
+    if let Some(d) = description {
+        conn.execute(
+            "UPDATE achievements SET description=?1 WHERE id=?2 AND kind='custom'",
+            params![d, id],
+        )?;
+    }
+    if let Some(ic) = icon {
+        conn.execute(
+            "UPDATE achievements SET icon=?1 WHERE id=?2 AND kind='custom'",
+            params![ic, id],
+        )?;
+    }
+    Ok(())
+}

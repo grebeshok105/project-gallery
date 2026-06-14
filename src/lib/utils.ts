@@ -6,7 +6,7 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function relativeDate(iso: string | null): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   const d = new Date(iso.includes("T") ? iso : iso.replace(" ", "T") + "Z");
   if (isNaN(d.getTime())) return iso;
   const diff = Date.now() - d.getTime();
@@ -20,7 +20,7 @@ export function relativeDate(iso: string | null): string {
 }
 
 const PALETTE = [
-  "#7c5cff", "#3ecf8e", "#ffb454", "#ff5c7c",
+  "#4f8ff7", "#3ecf8e", "#ffb454", "#ff5c7c",
   "#4cc9f0", "#f72585", "#b5179e", "#90be6d",
 ];
 

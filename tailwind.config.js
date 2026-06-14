@@ -13,9 +13,9 @@ export default {
         },
         line: "#262c38",
         accent: {
-          DEFAULT: "#7c5cff",
-          soft: "#9d86ff",
-          dim: "#4b3aa8",
+          DEFAULT: "#4f8ff7",
+          soft: "#7dabf8",
+          dim: "#2b5cae",
         },
         ok: "#3ecf8e",
         warn: "#ffb454",
@@ -26,7 +26,7 @@ export default {
         mono: ["JetBrains Mono", "Consolas", "monospace"],
       },
       boxShadow: {
-        glow: "0 0 0 1px rgba(124,92,255,0.25), 0 8px 40px -12px rgba(124,92,255,0.35)",
+        glow: "0 0 0 1px rgba(79,143,247,0.25), 0 8px 40px -12px rgba(79,143,247,0.35)",
         card: "0 4px 24px -8px rgba(0,0,0,0.5)",
       },
       keyframes: {

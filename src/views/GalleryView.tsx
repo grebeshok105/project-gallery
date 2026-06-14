@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Plus, Search, Heart, Download, Loader2 } from "lucide-react";
+import { Plus, Search, Heart, Download, Loader2, Sparkles } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { STATUS_LABELS, type Project } from "@/lib/types";
 import { ProjectCard } from "@/components/ProjectCard";
@@ -15,6 +15,7 @@ export function GalleryView() {
   const [editing, setEditing] = useState<Project | null>(null);
   const [detail, setDetail] = useState<Project | null>(null);
   const [importing, setImporting] = useState(false);
+  const [describing, setDescribing] = useState(false);
 
   function openNew() {
     setEditing(null);
@@ -48,6 +49,27 @@ export function GalleryView() {
     }
   }
 
+  async function autodescribe() {
+    setDescribing(true);
+    try {
+      const n = await api.llmAutodescribeMissing();
+      await refresh();
+      pushToast({
+        title: "Описания готовы",
+        description: `Сгенерировано: ${n}`,
+        icon: "sparkles",
+      });
+    } catch (e) {
+      pushToast({
+        title: "Ошибка генерации",
+        description: String(e).slice(0, 60),
+        icon: "sparkles",
+      });
+    } finally {
+      setDescribing(false);
+    }
+  }
+
   return (
     <div className="flex h-full flex-col">
       {/* Toolbar */}
@@ -56,6 +78,19 @@ export function GalleryView() {
           <h1 className="text-xl font-bold text-slate-100">Галерея проектов</h1>
           <span className="text-sm text-slate-500">{projects.length}</span>
           <div className="ml-auto flex items-center gap-2">
+            <button
+              className="btn-ghost"
+              onClick={autodescribe}
+              disabled={describing}
+              title="Сгенерировать короткие описания для проектов без описания"
+            >
+              {describing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              Описать ИИ
+            </button>
             <button
               className="btn-ghost"
               onClick={importGithub}

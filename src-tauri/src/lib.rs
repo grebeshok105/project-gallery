@@ -1,4 +1,5 @@
 mod achievements;
+mod agent;
 mod commands;
 mod db;
 mod github;
@@ -44,6 +45,8 @@ pub fn run() {
             commands::import_github,
             commands::llm_chat,
             commands::llm_project_ideas,
+            commands::llm_agent_chat,
+            commands::llm_autodescribe_missing,
         ])
         .run(tauri::generate_context!())
         .expect("ошибка запуска приложения Tauri");

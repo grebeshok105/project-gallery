@@ -18,7 +18,7 @@ export default function App() {
   }, [refresh, refreshConfig]);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-bg text-slate-200">
+    <div className="flex h-[100dvh] w-screen overflow-hidden bg-bg text-slate-200">
       <Sidebar tab={tab} setTab={setTab} />
       <main className="flex-1 overflow-hidden">
         <AnimatePresence mode="wait">

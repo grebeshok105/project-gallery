@@ -191,3 +191,43 @@ pub fn set_setting(conn: &Connection, key: &str, value: &str) -> Result<()> {
     )?;
     Ok(())
 }
+
+// ──────────────────────── точечные правки (для агента) ───────────────────
+
+pub fn set_description(conn: &Connection, id: i64, description: &str) -> Result<()> {
+    conn.execute(
+        "UPDATE projects SET description=?1, updated_at=datetime('now') WHERE id=?2",
+        params![description, id],
+    )?;
+    Ok(())
+}
+
+pub fn set_status(conn: &Connection, id: i64, status: &str) -> Result<()> {
+    conn.execute(
+        "UPDATE projects SET status=?1, updated_at=datetime('now') WHERE id=?2",
+        params![status, id],
+    )?;
+    Ok(())
+}
+
+/// Добавляет теги к проекту без удаления существующих.
+pub fn add_tags(conn: &Connection, id: i64, tags: &[String]) -> Result<()> {
+    for raw in tags {
+        let name = raw.trim().to_lowercase();
+        if name.is_empty() {
+            continue;
+        }
+        conn.execute("INSERT OR IGNORE INTO tags(name) VALUES (?1)", params![name])?;
+        let tag_id: i64 =
+            conn.query_row("SELECT id FROM tags WHERE name = ?1", params![name], |r| r.get(0))?;
+        conn.execute(
+            "INSERT OR IGNORE INTO project_tags(project_id, tag_id) VALUES (?1, ?2)",
+            params![id, tag_id],
+        )?;
+    }
+    conn.execute(
+        "UPDATE projects SET updated_at=datetime('now') WHERE id=?1",
+        [id],
+    )?;
+    Ok(())
+}

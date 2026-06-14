@@ -275,3 +275,154 @@ pub async fn llm_project_ideas(state: State<'_, Db>, project_id: i64, mode: Stri
     ];
     llm::chat(&cfg, &messages).await.map_err(e)
 }
+
+#[derive(serde::Serialize)]
+pub struct AgentReply {
+    pub reply: String,
+    pub actions: Vec<String>,
+}
+
+/// Агентный чат: модель может вызывать инструменты (читать/менять проекты и достижения).
+#[tauri::command]
+pub async fn llm_agent_chat(
+    state: State<'_, Db>,
+    messages: Vec<ChatMessage>,
+) -> R<AgentReply> {
+    let cfg = {
+        let conn = state.0.lock().map_err(e)?;
+        llm_config(&conn)
+    };
+
+    // Строим начальный список сообщений: system + история от клиента.
+    let mut msgs: Vec<serde_json::Value> = Vec::new();
+    msgs.push(serde_json::json!({"role": "system", "content": crate::agent::SYSTEM_PROMPT}));
+    for m in &messages {
+        if m.role == "system" {
+            continue;
+        }
+        msgs.push(serde_json::json!({"role": m.role, "content": m.content}));
+    }
+
+    let tools = crate::agent::tools();
+    let mut actions: Vec<String> = Vec::new();
+
+    for _ in 0..8 {
+        let body = serde_json::json!({
+            "model": cfg.model,
+            "messages": msgs,
+            "tools": tools,
+            "tool_choice": "auto",
+            "temperature": 0.4,
+            "max_tokens": 8192,
+        });
+        let resp = llm::raw_chat(&cfg, body).await.map_err(e)?;
+        let choice = resp
+            .get("choices")
+            .and_then(|c| c.get(0))
+            .and_then(|c| c.get("message"))
+            .cloned()
+            .ok_or_else(|| "Пустой ответ от LLM".to_string())?;
+
+        let tool_calls = choice.get("tool_calls").and_then(|t| t.as_array()).cloned();
+
+        match tool_calls {
+            Some(calls) if !calls.is_empty() => {
+                // Кладём сообщение ассистента с tool_calls обратно в историю
+                // (только разрешённые поля, без reasoning_content и прочего).
+                msgs.push(serde_json::json!({
+                    "role": "assistant",
+                    "content": choice.get("content").cloned().unwrap_or(serde_json::Value::Null),
+                    "tool_calls": calls,
+                }));
+                // Исполняем каждый вызов под одной блокировкой БД.
+                {
+                    let conn = state.0.lock().map_err(e)?;
+                    for call in &calls {
+                        let id = call.get("id").and_then(|v| v.as_str()).unwrap_or("");
+                        let func = call.get("function").cloned().unwrap_or_default();
+                        let name = func.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                        let args_raw = func
+                            .get("arguments")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("{}");
+                        let args: serde_json::Value =
+                            serde_json::from_str(args_raw).unwrap_or(serde_json::json!({}));
+                        let outcome = match crate::agent::dispatch(&conn, name, &args) {
+                            Ok(o) => o,
+                            Err(err) => crate::agent::ToolOutcome {
+                                result: format!("Ошибка инструмента: {err}"),
+                                action: None,
+                            },
+                        };
+                        if let Some(a) = outcome.action {
+                            actions.push(a);
+                        }
+                        msgs.push(serde_json::json!({
+                            "role": "tool",
+                            "tool_call_id": id,
+                            "content": outcome.result,
+                        }));
+                    }
+                }
+            }
+            _ => {
+                let reply = choice
+                    .get("content")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                return Ok(AgentReply { reply, actions });
+            }
+        }
+    }
+
+    Ok(AgentReply {
+        reply: "Достигнут лимит шагов агента. Часть действий могла выполниться, проверь галерею.".into(),
+        actions,
+    })
+}
+
+/// Генерирует короткие описания для всех проектов без описания. Возвращает число обработанных.
+#[tauri::command]
+pub async fn llm_autodescribe_missing(state: State<'_, Db>) -> R<usize> {
+    let (cfg, targets) = {
+        let conn = state.0.lock().map_err(e)?;
+        let cfg = llm_config(&conn);
+        let all = db::list_projects(&conn, &ProjectFilter::default()).map_err(e)?;
+        let targets: Vec<(i64, String, Option<String>)> = all
+            .into_iter()
+            .filter(|p| p.description.trim().is_empty())
+            .map(|p| (p.id, p.title, p.language))
+            .collect();
+        (cfg, targets)
+    };
+
+    if cfg.model.trim().is_empty() {
+        return Err("Не задана модель LLM в настройках.".into());
+    }
+
+    let mut done = 0usize;
+    for (id, title, lang) in targets {
+        let prompt = format!(
+            "Напиши очень короткое описание (1-2 предложения, без эмодзи, без тире) для pet-проекта «{}». Язык/стек: {}. Верни только текст описания.",
+            title,
+            lang.unwrap_or_else(|| "не указан".into())
+        );
+        let messages = vec![
+            ChatMessage { role: "system".into(), content: "Ты пишешь лаконичные описания проектов по-русски.".into() },
+            ChatMessage { role: "user".into(), content: prompt },
+        ];
+        match llm::chat(&cfg, &messages).await {
+            Ok(text) => {
+                let desc = text.trim().trim_matches('"').to_string();
+                if !desc.is_empty() {
+                    let conn = state.0.lock().map_err(e)?;
+                    db::set_description(&conn, id, &desc).map_err(e)?;
+                    done += 1;
+                }
+            }
+            Err(_) => continue,
+        }
+    }
+    Ok(done)
+}

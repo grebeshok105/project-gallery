@@ -94,7 +94,7 @@
   }
 
   .nav-item {
-    @apply group flex items-center gap-3 rounded-2xl px-3.5 py-3 text-sm font-medium
+    @apply flex items-center gap-3 rounded-2xl px-3.5 py-3 text-sm font-medium
       text-fg-dim transition-all duration-300 ease-spring hover:text-fg
       hover:bg-white/[0.04] cursor-pointer;
   }

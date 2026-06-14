@@ -25,12 +25,13 @@ keyring = { version = "3", features = ["windows-native"] }
 thiserror = "2"
 anyhow = "1"
 
-# Форсируем ТОЧНЫЕ версии аллокаторных крейтов. Без этого cargo тянет
-# alloc-stdlib 0.2.3, который разрешает alloc-no-stdlib до 3.0.0, а `brotli`
-# хочет 2.x — две версии в дереве дают E0277 в implement_allocator.
-# Точный `=0.2.2` выбрасывает сломанный 0.2.3 из графа.
+# Форсируем ТОЧНЫЕ версии, иначе транзитивный `brotli` не компилируется.
+# brotli 8.0.3 хочет alloc-no-stdlib 2.x, но свежие brotli-decompressor 5.0.2
+# и alloc-stdlib 0.2.3 разрешают alloc-no-stdlib до 3.0.0 — две версии в дереве
+# дают E0277 в implement_allocator. Точные пины держат всё на 2.x.
 alloc-no-stdlib = "=2.0.4"
 alloc-stdlib = "=0.2.2"
+brotli-decompressor = "=5.0.1"
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]

@@ -3,8 +3,6 @@ import { motion } from "framer-motion";
 import {
   Plus, MagnifyingGlass, Heart, DownloadSimple, CircleNotch, Sparkle, Archive,
 } from "@phosphor-icons/react";
-  Plus, MagnifyingGlass, Heart, DownloadSimple, CircleNotch, Sparkle,
-} from "@phosphor-icons/react";
 import { useStore } from "@/lib/store";
 import { STATUS_LABELS, type Project } from "@/lib/types";
 import { ProjectCard } from "@/components/ProjectCard";

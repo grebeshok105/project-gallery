@@ -139,10 +139,6 @@ export const useStore = create<AppState>((set, get) => ({
     if (get().soundEnabled) playSound("unlock");
     setTimeout(() => get().dismissToast(id), 5000);
   },
-    const id = Date.now() + Math.random();
-    set({ toasts: [...get().toasts, { ...t, id }] });
-    setTimeout(() => get().dismissToast(id), 5000);
-  },
 
   dismissToast: (id) =>
     set({ toasts: get().toasts.filter((t) => t.id !== id) }),
